@@ -1,6 +1,6 @@
 #
 # Author:: Adam Jacob (<adam@chef.io>)
-# Copyright:: Copyright 2010-2016, Chef Software Inc.
+# Copyright:: Copyright 2010-2019, Chef Software Inc.
 # License:: Apache License, Version 2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,11 +22,16 @@ require "erubis"
 require "chef/knife/bootstrap/chef_vault_handler"
 require "chef/knife/bootstrap/client_builder"
 require "chef/util/path_helper"
+require "chef/knife/bootstrap/options"
 
 class Chef
   class Knife
     class Bootstrap < Knife
       include DataBagSecretOptions
+
+      # Command line flags and options for bootstrap - there's a large number of them
+      # so we'll keep this file a little smaller by splitting them out.
+      include Bootstrap::Options
 
       attr_accessor :client_builder
       attr_accessor :chef_vault_handler
@@ -38,18 +43,14 @@ class Chef
         require "tempfile"
         require "chef_core/text" # i18n and standardized error structures
         require "chef_core/target_host"
-
-        # Command line flags and options for bootstrap - there's a large number of them
-        # so we'll keep this file a little smaller by splitting them out.
-        require "chef/knife/bootstrap/options"
-        self.include Chef::Knife::Bootstrap::Options
+        require "chef_core/target_resolver"
 
         # Because nothing else is using i18n out of Chef::Text yet, we're treating it
         # as a dependency to avoid loading localization files before we need them.
         ChefCore::Text.add_gem_localization("chef")
       end
 
-      banner "knife bootstrap [SSH_USER@]FQDN (options)"
+      banner "knife bootstrap [PROTOCOL://][USER@]FQDN (options)"
 
       def initialize(argv = [])
         super
