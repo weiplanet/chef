@@ -38,7 +38,6 @@ class Chef
       attr_reader   :target_host
 
       deps do
-        require "chef/knife/core/bootstrap_context"
         require "chef/json_compat"
         require "tempfile"
         require "chef_core/text" # i18n and standardized error structures
@@ -71,7 +70,11 @@ class Chef
       #
       # @return [String] Default bootstrap template
       def default_bootstrap_template
-        "chef-full"
+        if target_host.base_os == :windows
+          "windows-chef-client-msi"
+        else
+          "chef-full"
+        end
       end
 
       def host_descriptor
@@ -89,11 +92,6 @@ class Chef
         end
       end
 
-      def user_name
-        if host_descriptor
-          @user_name ||= host_descriptor.split("@").reverse[1]
-        end
-      end
 
       def bootstrap_template
         # Allow passing a bootstrap template or use the default
@@ -138,12 +136,18 @@ class Chef
       end
 
       def bootstrap_context
-        @bootstrap_context ||= Knife::Core::BootstrapContext.new(
-          config,
-          config[:run_list],
-          Chef::Config,
-          secret
-        )
+        #require "pry"; binding.pry
+        @bootstrap_context ||=
+          if target_host.base_os == :windows
+
+            require "chef/knife/core/windows_bootstrap_context"
+            Knife::Core::WindowsBootstrapContext.new(config, config[:run_list],
+                                                     Chef::Config, secret)
+          else
+            require "chef/knife/core/bootstrap_context"
+            Knife::Core::BootstrapContext.new(config, config[:run_list],
+                                              Chef::Config, secret)
+          end
       end
 
       def first_boot_attributes
@@ -181,7 +185,6 @@ class Chef
 
           chef_vault_handler.run(client_builder.client)
 
-          bootstrap_context.client_pem = client_builder.client_path
         else
           ui.info("Doing old-style registration with the validation key at #{Chef::Config[:validation_key]}...")
           ui.info("Delete your validation key in order to use your user credentials instead")
@@ -191,33 +194,41 @@ class Chef
         ui.info("Connecting to #{ui.color(server_name, :bold)}")
 
         begin
-          # TODO live stream output may take some doing, and knife ssh does it already
-          @target_host = ChefCore::TargetHost.new(server_name, ssh_opts)
+          # Resolve the given host name to a TargetHost instance. We will limit
+          # the number of hosts to 1 (effectivly eliminating wildcard support) since
+          # we only support running bootstrap against one host at a time.
+          resolver = ChefCore::TargetResolver.new(host_descriptor, config[:protocol] || "ssh",
+                                                  connection_opts, max_expanded_targets: 1)
+          @target_host = resolver.targets.first
+          # rescue: TargetResolverError
           target_host.connect!
+          # TODO Creating bootstrap context needs a live connection to query OS info
+          unless client_builder.client_path.nil?
+            bootstrap_context.client_pem = client_builder.client_path
+          end
           bootstrap_path = render_and_upload_bootstrap
-          r = target_host.run_command(ssh_command(bootstrap_path))
+          r = target_host.run_command(bootstrap_command(bootstrap_path))
           if r.exit_status != 0
-            ui.error("The following error occurred on on #{server_name}:")
+            ui.error("The following error occurred on #{server_name}:")
             ui.error(r.stderr)
             exit 1
           end
 
-          # TODO - woudl be nice to pull in chef-cdore error printing, but that'll change expected output
           # TODO mp 2019-02-22 this *should* be the same behavior under train without
           # forcing the behavior here, but we need to verify that.
           #
           # rescue Net::SSH::AuthenticationFailed
-          #   if config[:ssh_password]
+          #   if config[:password]
           #     raise
           #   else
-          #     ui.info("Failed to authenticate #{knife_ssh.config[:ssh_user]} - trying password auth")
+          #     ui.info("Failed to authenticate #{knife_ssh.config[:user]} - trying password auth")
           #     knife_ssh_with_password_auth.run
           # def knife_ssh_with_password_auth
           #   # prompt for a password then return a knife ssh object with that password set
           #   # and with ssh_identity_file set to nil
           #   ssh = knife_ssh
           #   ssh.config[:ssh_identity_file] = nil
-          #   ssh.config[:ssh_password] = ssh.get_password
+          #   ssh.config[:password] = ssh.get_password
           #   ssh
           # end
           #   end
@@ -229,9 +240,6 @@ class Chef
         if server_name.nil?
           ui.error("Must pass an FQDN or ip to bootstrap")
           exit 1
-        elsif server_name == "windows"
-          # catches "knife bootstrap windows" when that command is not installed
-          ui.warn("'knife bootstrap windows' specified, but the knife-windows plugin is not installed. Please install 'knife-windows' if you are attempting to bootstrap a Windows node via WinRM.")
         end
       end
 
@@ -253,41 +261,59 @@ class Chef
         true
       end
 
-      # setup a Chef::Knife::Ssh object using the passed config options
+      def connection_protocol
+
+      end
+
+
+      # Createa configuration object based on setup a Chef::Knife::Ssh object using the passed config options
       #
-      # @return Chef::Knife::Ssh
-      def ssh_opts
+      # @return a configuration hash suitable for connecting to the remote host.
+      def connection_opts
+        # Mapping of our options ot train options - they're pretty similar with removal of
+        # the ssh- prefix, but there's more to corre2ct
+        # TODO - is now the time to change flag names for consistency?
         opts = {
-          # TODO based on khife ssh, we will set :keys_only to true if a key is present.
-          host: server_name,
-          port: config[:ssh_port],
-          user: user_name || config[:ssh_user],
+          port: config[:port], # Default if it's not in the connection string
+          user: config[:user], #  "
+          password: config[:password], # TODO - check if we need to exclude if not set, diff behavior for nil?
           key_files: config[:ssh_identity_file],
-          logger:  Chef::Log
+          logger:  Chef::Log,
+          # WinRM options - they will be ignored for ssh
+          # TODO train will throw if this is not valid, should be OK as-is
+          winrm_transport: config[:winrm_transport],
+          self_signed: config[:winrm_self_signed_cert],
+          ssl: config[:winrm_ssl]
         }
-        if config[:ssh_password]
-          opts[:password] = config[:ssh_password]
-        end
+
         if config[:use_sudo]
           opts[:sudo] = true
+          # TODO this preserves original logic - we're using the provided password for sudo
+          # if sudo is enabled.  Note that train supports a separate sudo password.
+          # TODO - check original, what if password was not given? Where do we validate?
           if opts[:use_sudo_password]
-            opts[:sudo_password] = config[:ssh_password]
+            opts[:sudo_password] = config[:password]
           end
           if opts[:preserve_home]
              opts[:sudo_options] = "-H"
           end
         end
-        opts
 
-        # TODO - looks like we can password, or we can sudo password, but we can't
-        # do both currently in bootstrap.  train permits both if we want to add the option
-        # TODO - we can now allow a custom sudo_command
-          #
+        if config[:password]
+          opts[:password] = config[:password]
+        end
+
+        if config[:ssh_identity_file]
+          # TODO - to get the matching original knife bootstrap fallback behavior of prompting for password
+          # when we don't provide it, I think we'll want  to _not_ do this here - we should get automatic
+          # keyboard-interactive auth if we don't set this and key fails.
+          opts[:keys_only] = true
+        end
         # ssh.config[:ssh_gateway_identity] = config[:ssh_gateway_identity]
         # ssh.config[:forward_agent] = config[:forward_agent]
         # ssh.config[:ssh_identity_file] = config[:ssh_identity_file]
         # ssh.config[:manual] = true
-          # TODO train appears to false this to always false.  We'll need to make it an option.
+        # TODO train appears to false this to always false.  We'll need to make it an option.
         # ssh.config[:host_key_verify] = config[:host_key_verify]
         # ssh.config[:on_error] = true
         # TODO: proxy command
@@ -301,20 +327,28 @@ class Chef
         # short: "-e",
         # long: "--exit-on-error",
         # description: "Immediately exit if an error is encountered.",
+        opts
       end
+
+
 
       def render_and_upload_bootstrap
         content = render_template
-        remote_path = target_host.normalize_path(File.join(target_host.temp_dir, "bootstrap.sh"))
+        script_name = target_host.base_os == :windows ? "bootstrap.bat" : "bootstrap.sh"
+        remote_path = target_host.normalize_path(File.join(target_host.temp_dir, script_name))
         target_host.save_as_remote_file(content, remote_path)
         remote_path
       end
 
 
-      # build the ssh command for bootrapping
+      # build the command string for bootrapping
       # @return String
-      def ssh_command(remote_path)
-        "sh #{remote_path} "
+      def bootstrap_command(remote_path)
+        if target_host.base_os == :windows
+          "cmd.exe /C #{remote_path}"
+        else
+          "sh #{remote_path} "
+        end
       end
 
       private
