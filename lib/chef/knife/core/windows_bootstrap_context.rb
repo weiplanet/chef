@@ -29,7 +29,6 @@ class Chef
       # * @run_list - the run list for the node to boostrap
       #
       class WindowsBootstrapContext < BootstrapContext
-        attr_accessor :client_pem
 
         def initialize(config, run_list, chef_config, secret=nil)
           @config       = config
@@ -63,12 +62,12 @@ class Chef
         end
 
         def config_content
-          client_rb = <<-CONFIG
-chef_server_url  "#{@chef_config[:chef_server_url]}"
-validation_client_name "#{@chef_config[:validation_client_name]}"
-file_cache_path   "c:/chef/cache"
-file_backup_path  "c:/chef/backup"
-cache_options     ({:path => "c:/chef/cache/checksums", :skip_expires => true})
+          client_rb = <<~CONFIG
+            chef_server_url  "#{@chef_config[:chef_server_url]}"
+            validation_client_name "#{@chef_config[:validation_client_name]}"
+            file_cache_path   "c:/chef/cache"
+            file_backup_path  "c:/chef/backup"
+            cache_options     ({:path => "c:/chef/cache/checksums", :skip_expires => true})
           CONFIG
           if @config[:chef_node_name]
             client_rb << %Q{node_name "#{@config[:chef_node_name]}"\n}
@@ -134,13 +133,13 @@ cache_options     ({:path => "c:/chef/cache/checksums", :skip_expires => true})
           end
 
           if Chef::Config[:fips]
-            client_rb << <<-CONFIG
-fips true
-chef_version = ::Chef::VERSION.split(".")
-unless chef_version[0].to_i > 12 || (chef_version[0].to_i == 12 && chef_version[1].to_i >= 8)
-  raise "FIPS Mode requested but not supported by this client"
-end
-CONFIG
+            client_rb << <<~CONFIG
+              fips true
+              chef_version = ::Chef::VERSION.split(".")
+              unless chef_version[0].to_i > 12 || (chef_version[0].to_i == 12 && chef_version[1].to_i >= 8)
+                raise "FIPS Mode requested but not supported by this client"
+              end
+            CONFIG
           end
 
           escape_and_echo(client_rb)
@@ -195,90 +194,90 @@ CONFIG
         def win_wget
           # I tried my best to figure out how to properly url decode and switch / to \
           # but this is VBScript - so I don't really care that badly.
-          win_wget = <<-WGET
-url = WScript.Arguments.Named("url")
-path = WScript.Arguments.Named("path")
-proxy = null
-'* Vaguely attempt to handle file:// scheme urls by url unescaping and switching all
-'* / into \.  Also assume that file:/// is a local absolute path and that file://<foo>
-'* is possibly a network file path.
-If InStr(url, "file://") = 1 Then
-url = Unescape(url)
-If InStr(url, "file:///") = 1 Then
-sourcePath = Mid(url, Len("file:///") + 1)
-Else
-sourcePath = Mid(url, Len("file:") + 1)
-End If
-sourcePath = Replace(sourcePath, "/", "\\")
+          win_wget = <<~WGET
+            url = WScript.Arguments.Named("url")
+            path = WScript.Arguments.Named("path")
+            proxy = null
+            '* Vaguely attempt to handle file:// scheme urls by url unescaping and switching all
+            '* / into \.  Also assume that file:/// is a local absolute path and that file://<foo>
+            '* is possibly a network file path.
+            If InStr(url, "file://") = 1 Then
+            url = Unescape(url)
+            If InStr(url, "file:///") = 1 Then
+            sourcePath = Mid(url, Len("file:///") + 1)
+            Else
+            sourcePath = Mid(url, Len("file:") + 1)
+            End If
+            sourcePath = Replace(sourcePath, "/", "\\")
 
-Set objFSO = CreateObject("Scripting.FileSystemObject")
-If objFSO.Fileexists(path) Then objFSO.DeleteFile path
-objFSO.CopyFile sourcePath, path, true
-Set objFSO = Nothing
+            Set objFSO = CreateObject("Scripting.FileSystemObject")
+            If objFSO.Fileexists(path) Then objFSO.DeleteFile path
+            objFSO.CopyFile sourcePath, path, true
+            Set objFSO = Nothing
 
-Else
-Set objXMLHTTP = CreateObject("MSXML2.ServerXMLHTTP")
-Set wshShell = CreateObject( "WScript.Shell" )
-Set objUserVariables = wshShell.Environment("USER")
+            Else
+            Set objXMLHTTP = CreateObject("MSXML2.ServerXMLHTTP")
+            Set wshShell = CreateObject( "WScript.Shell" )
+            Set objUserVariables = wshShell.Environment("USER")
 
-rem http proxy is optional
-rem attempt to read from HTTP_PROXY env var first
-On Error Resume Next
+            rem http proxy is optional
+            rem attempt to read from HTTP_PROXY env var first
+            On Error Resume Next
 
-If NOT (objUserVariables("HTTP_PROXY") = "") Then
-proxy = objUserVariables("HTTP_PROXY")
+            If NOT (objUserVariables("HTTP_PROXY") = "") Then
+            proxy = objUserVariables("HTTP_PROXY")
 
-rem fall back to named arg
-ElseIf NOT (WScript.Arguments.Named("proxy") = "") Then
-proxy = WScript.Arguments.Named("proxy")
-End If
+            rem fall back to named arg
+            ElseIf NOT (WScript.Arguments.Named("proxy") = "") Then
+            proxy = WScript.Arguments.Named("proxy")
+            End If
 
-If NOT isNull(proxy) Then
-rem setProxy method is only available on ServerXMLHTTP 6.0+
-Set objXMLHTTP = CreateObject("MSXML2.ServerXMLHTTP.6.0")
-objXMLHTTP.setProxy 2, proxy
-End If
+            If NOT isNull(proxy) Then
+            rem setProxy method is only available on ServerXMLHTTP 6.0+
+            Set objXMLHTTP = CreateObject("MSXML2.ServerXMLHTTP.6.0")
+            objXMLHTTP.setProxy 2, proxy
+            End If
 
-On Error Goto 0
+            On Error Goto 0
 
-objXMLHTTP.open "GET", url, false
-objXMLHTTP.send()
-If objXMLHTTP.Status = 200 Then
-Set objADOStream = CreateObject("ADODB.Stream")
-objADOStream.Open
-objADOStream.Type = 1
-objADOStream.Write objXMLHTTP.ResponseBody
-objADOStream.Position = 0
-Set objFSO = Createobject("Scripting.FileSystemObject")
-If objFSO.Fileexists(path) Then objFSO.DeleteFile path
-Set objFSO = Nothing
-objADOStream.SaveToFile path
-objADOStream.Close
-Set objADOStream = Nothing
-End If
-Set objXMLHTTP = Nothing
-End If
-WGET
+            objXMLHTTP.open "GET", url, false
+            objXMLHTTP.send()
+            If objXMLHTTP.Status = 200 Then
+            Set objADOStream = CreateObject("ADODB.Stream")
+            objADOStream.Open
+            objADOStream.Type = 1
+            objADOStream.Write objXMLHTTP.ResponseBody
+            objADOStream.Position = 0
+            Set objFSO = Createobject("Scripting.FileSystemObject")
+            If objFSO.Fileexists(path) Then objFSO.DeleteFile path
+            Set objFSO = Nothing
+            objADOStream.SaveToFile path
+            objADOStream.Close
+            Set objADOStream = Nothing
+            End If
+            Set objXMLHTTP = Nothing
+            End If
+          WGET
           escape_and_echo(win_wget)
         end
 
         def win_wget_ps
-          win_wget_ps = <<-WGET_PS
-param(
-   [String] $remoteUrl,
-   [String] $localPath
-)
+          win_wget_ps = <<~WGET_PS
+            param(
+               [String] $remoteUrl,
+               [String] $localPath
+            )
 
-$ProxyUrl = $env:http_proxy;
-$webClient = new-object System.Net.WebClient;
+            $ProxyUrl = $env:http_proxy;
+            $webClient = new-object System.Net.WebClient;
 
-if ($ProxyUrl -ne '') {
-  $WebProxy = New-Object System.Net.WebProxy($ProxyUrl,$true)
-  $WebClient.Proxy = $WebProxy
-}
+            if ($ProxyUrl -ne '') {
+              $WebProxy = New-Object System.Net.WebProxy($ProxyUrl,$true)
+              $WebClient.Proxy = $WebProxy
+            }
 
-$webClient.DownloadFile($remoteUrl, $localPath);
-WGET_PS
+            $webClient.DownloadFile($remoteUrl, $localPath);
+          WGET_PS
 
           escape_and_echo(win_wget_ps)
         end
@@ -372,40 +371,40 @@ WGET_PS
           # need to be double quoted, schtasks allows the use of single
           # quotes that will later be converted to double quotes
           command = install_command('\'')
-<<-EOH
-          @set MSIERRORCODE=!ERRORLEVEL!
-          @if ERRORLEVEL 1 (
-              @echo WARNING: Failed to install Chef Client MSI package in remote context with status code !MSIERRORCODE!.
-              @echo WARNING: This may be due to a defect in operating system update KB2918614: http://support.microsoft.com/kb/2918614
-              @set OLDLOGLOCATION="%CHEF_CLIENT_MSI_LOG_PATH%-fail.log"
-              @move "%CHEF_CLIENT_MSI_LOG_PATH%" "!OLDLOGLOCATION!" > NUL
-              @echo WARNING: Saving installation log of failure at !OLDLOGLOCATION!
-              @echo WARNING: Retrying installation with local context...
-              @schtasks /create /f  /sc once /st 00:00:00 /tn chefclientbootstraptask /ru SYSTEM /rl HIGHEST /tr \"cmd /c #{command} & sleep 2 & waitfor /s %computername% /si chefclientinstalldone\"
+          <<~EOH
+            @set MSIERRORCODE=!ERRORLEVEL!
+            @if ERRORLEVEL 1 (
+                @echo WARNING: Failed to install Chef Client MSI package in remote context with status code !MSIERRORCODE!.
+                @echo WARNING: This may be due to a defect in operating system update KB2918614: http://support.microsoft.com/kb/2918614
+                @set OLDLOGLOCATION="%CHEF_CLIENT_MSI_LOG_PATH%-fail.log"
+                @move "%CHEF_CLIENT_MSI_LOG_PATH%" "!OLDLOGLOCATION!" > NUL
+                @echo WARNING: Saving installation log of failure at !OLDLOGLOCATION!
+                @echo WARNING: Retrying installation with local context...
+                @schtasks /create /f  /sc once /st 00:00:00 /tn chefclientbootstraptask /ru SYSTEM /rl HIGHEST /tr \"cmd /c #{command} & sleep 2 & waitfor /s %computername% /si chefclientinstalldone\"
 
-              @if ERRORLEVEL 1 (
-                  @echo ERROR: Failed to create Chef Client installation scheduled task with status code !ERRORLEVEL! > "&2"
-              ) else (
-                  @echo Successfully created scheduled task to install Chef Client.
-                  @schtasks /run /tn chefclientbootstraptask
-                  @if ERRORLEVEL 1 (
-                      @echo ERROR: Failed to execut Chef Client installation scheduled task with status code !ERRORLEVEL!. > "&2"
-                  ) else (
-                      @echo Successfully started Chef Client installation scheduled task.
-                      @echo Waiting for installation to complete -- this may take a few minutes...
-                      waitfor chefclientinstalldone /t 600
-                      if ERRORLEVEL 1 (
-                          @echo ERROR: Timed out waiting for Chef Client package to install
-                      ) else (
-                          @echo Finished waiting for Chef Client package to install.
-                      )
-                      @schtasks /delete /f /tn chefclientbootstraptask > NUL
-                  )
-              )
-          ) else (
-              @echo Successfully installed Chef Client package.
-          )
-EOH
+                @if ERRORLEVEL 1 (
+                    @echo ERROR: Failed to create Chef Client installation scheduled task with status code !ERRORLEVEL! > "&2"
+                ) else (
+                    @echo Successfully created scheduled task to install Chef Client.
+                    @schtasks /run /tn chefclientbootstraptask
+                    @if ERRORLEVEL 1 (
+                        @echo ERROR: Failed to execut Chef Client installation scheduled task with status code !ERRORLEVEL!. > "&2"
+                    ) else (
+                        @echo Successfully started Chef Client installation scheduled task.
+                        @echo Waiting for installation to complete -- this may take a few minutes...
+                        waitfor chefclientinstalldone /t 600
+                        if ERRORLEVEL 1 (
+                            @echo ERROR: Timed out waiting for Chef Client package to install
+                        ) else (
+                            @echo Finished waiting for Chef Client package to install.
+                        )
+                        @schtasks /delete /f /tn chefclientbootstraptask > NUL
+                    )
+                )
+            ) else (
+                @echo Successfully installed Chef Client package.
+            )
+          EOH
         end
       end
     end
