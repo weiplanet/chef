@@ -65,8 +65,8 @@ class Chef
         )
       end
 
-      # The default bootstrap template to use to bootstrap a server This is a public API hook
-      # which knife plugins use or inherit and override.
+      # The default bootstrap template to use to bootstrap a server.
+      # This is a public API hook which knife plugins use or inherit and override.
       #
       # @return [String] Default bootstrap template
       def default_bootstrap_template
@@ -93,9 +93,9 @@ class Chef
       end
 
 
+      # @return [String] The CLI specific bootstrap template or the default
       def bootstrap_template
         # Allow passing a bootstrap template or use the default
-        # @return [String] The CLI specific bootstrap template or the default
         config[:bootstrap_template] || default_bootstrap_template
       end
 
@@ -136,7 +136,6 @@ class Chef
       end
 
       def bootstrap_context
-        #require "pry"; binding.pry
         @bootstrap_context ||=
           if target_host.base_os == :windows
 
@@ -202,7 +201,8 @@ class Chef
           @target_host = resolver.targets.first
           # rescue: TargetResolverError
           target_host.connect!
-          # TODO Creating bootstrap context needs a live connection to query OS info
+          # Now that we have a connected target_host, we can use (by referencing it...)
+          # "bootstrap_context".
           unless client_builder.client_path.nil?
             bootstrap_context.client_pem = client_builder.client_path
           end
