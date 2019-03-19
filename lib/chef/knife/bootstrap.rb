@@ -43,10 +43,6 @@ class Chef
         require "chef_core/text" # i18n and standardized error structures
         require "chef_core/target_host"
         require "chef_core/target_resolver"
-
-        # Because nothing else is using i18n out of Chef::Text yet, we're treating it
-        # as a dependency to avoid loading localization files before we need them.
-        ChefCore::Text.add_gem_localization("chef")
       end
 
       banner "knife bootstrap [PROTOCOL://][USER@]FQDN (options)"
@@ -170,6 +166,8 @@ class Chef
 
         $stdout.sync = true
 
+        bootstrap_path = nil
+
         # chef-vault integration must use the new client-side hawtness, otherwise to use the
         # new client-side hawtness, just delete your validation key.
         if chef_vault_handler.doing_chef_vault? ||
@@ -190,49 +188,70 @@ class Chef
           ui.info("")
         end
 
-        ui.info("Connecting to #{ui.color(server_name, :bold)}")
+        connect!
 
-        begin
-          # Resolve the given host name to a TargetHost instance. We will limit
-          # the number of hosts to 1 (effectivly eliminating wildcard support) since
-          # we only support running bootstrap against one host at a time.
-          resolver = ChefCore::TargetResolver.new(host_descriptor, config[:protocol] || "ssh",
-                                                  connection_opts, max_expanded_targets: 1)
-          @target_host = resolver.targets.first
-          # rescue: TargetResolverError
-          target_host.connect!
-          # Now that we have a connected target_host, we can use (by referencing it...)
-          # "bootstrap_context".
-          unless client_builder.client_path.nil?
-            bootstrap_context.client_pem = client_builder.client_path
-          end
-          bootstrap_path = render_and_upload_bootstrap
-          r = target_host.run_command(bootstrap_command(bootstrap_path))
-          if r.exit_status != 0
-            ui.error("The following error occurred on #{server_name}:")
-            ui.error(r.stderr)
-            exit 1
-          end
-
-          # TODO mp 2019-02-22 this *should* be the same behavior under train without
-          # forcing the behavior here, but we need to verify that.
-          #
-          # rescue Net::SSH::AuthenticationFailed
-          #   if config[:password]
-          #     raise
-          #   else
-          #     ui.info("Failed to authenticate #{knife_ssh.config[:user]} - trying password auth")
-          #     knife_ssh_with_password_auth.run
-          # def knife_ssh_with_password_auth
-          #   # prompt for a password then return a knife ssh object with that password set
-          #   # and with ssh_identity_file set to nil
-          #   ssh = knife_ssh
-          #   ssh.config[:ssh_identity_file] = nil
-          #   ssh.config[:password] = ssh.get_password
-          #   ssh
-          # end
-          #   end
+        # Now that we have a connected target_host, we can use (by referencing it...)
+        # "bootstrap_context".
+        unless client_builder.client_path.nil?
+          bootstrap_context.client_pem = client_builder.client_path
         end
+
+        bootstrap_path = render_and_upload_bootstrap
+        ui.info("Bootstrapping #{ui.color(server_name, :bold)}")
+        r = target_host.run_command(bootstrap_command(bootstrap_path)) do |data|
+          ui.msg("#{ui.color(" [#{target_host.hostname}]", :cyan)} #{data}")
+        end
+        if r.exit_status != 0
+          ui.error("The following error occurred on #{server_name}:")
+          ui.error(r.stderr)
+          exit 1
+        end
+      ensure
+        target_host.del_file(bootstrap_path) if target_host && bootstrap_path
+      end
+
+      def connect!
+        ui.info("Connecting to #{ui.color(server_name, :bold)}")
+        opts = connection_opts.dup
+        do_connect(opts) # rescue: TargetResolverError
+      rescue => e
+        # Ugh. TODO 1: Train raises a Train::Transports::SSHFailed for a number of different errors. chef_core makes that
+        # a more general ConnectionFailed, with an error code based on the specific error text/reason provided from trainm.
+        # This means we have to look three layers intot he exception to find out what actually happened instead of just
+        # looking at the exception type
+        #
+        # It doesn't help to provide our own error if it does't let the caller know what they need to identify the problem.
+        # Let's update chef_core to be a bit smarter about resolving the errors to an appropriate exception type
+        # (eg ChefCore::ConnectionFailed::AuthError or similar) that will work across protocols, instead of just a single
+        # ConnectionFailure type
+        #
+        # # TODO 2 - it is possible for train to automatically do the reprompt for password
+        #            but that will take a little digging through the train ssh protocol layer.
+        if e.cause && e.cause.cause && e.cause.cause.class == Net::SSH::AuthenticationFailed
+          if opts[:password]
+            raise
+          else
+            ui.warn("Failed to authenticate #{target_host.user} - trying password auth")
+            password = ui.ask("Enter password for #{target_host.user}@#{target_host.hostname}: ") do |q|
+              q.echo = false
+            end
+            update_connection_opts_for_forced_password(opts, password)
+            do_connect(opts)
+          end
+        else
+          raise
+        end
+      end
+
+      def do_connect(conn_options)
+        # Resolve the given host name to a TargetHost instance. We will limit
+        # the number of hosts to 1 (effectivly eliminating wildcard support) since
+        # we only support running bootstrap against one host at a time.
+        resolver = ChefCore::TargetResolver.new(host_descriptor, config[:protocol] || "ssh",
+                                                conn_options, max_expanded_targets: 1)
+        @target_host = resolver.targets.first
+        @target_host.connect!
+        @target_host
       end
 
       # fail if the server_name is nil
@@ -261,36 +280,50 @@ class Chef
         true
       end
 
-      def connection_protocol
-
-      end
-
-
       # Createa configuration object based on setup a Chef::Knife::Ssh object using the passed config options
+      # Includes connection information for both supported protocols at this time - unused config is ignored.
       #
-      # @return a configuration hash suitable for connecting to the remote host.
+      # @return a configuration hash suitable for connecting to the remote host via TargetHost.
       def connection_opts
-        # Mapping of our options ot train options - they're pretty similar with removal of
-        # the ssh- prefix, but there's more to corre2ct
-        # TODO - is now the time to change flag names for consistency?
+        # Mapping of our options to TargetHost/train options - they're pretty similar with removal of
+        # the ssh- prefix, but there's more to correct
         opts = {
           port: config[:port], # Default if it's not in the connection string
           user: config[:user], #  "
           password: config[:password], # TODO - check if we need to exclude if not set, diff behavior for nil?
-          key_files: config[:ssh_identity_file],
+          forward_agent: config[:forward_agent] || false ,
           logger:  Chef::Log,
+          key_files: [],
           # WinRM options - they will be ignored for ssh
           # TODO train will throw if this is not valid, should be OK as-is
           winrm_transport: config[:winrm_transport],
-          self_signed: config[:winrm_self_signed_cert],
-          ssl: config[:winrm_ssl]
+          self_signed: config[:winrm_no_verify_cert] === true,
+          winrm_basic_auth_only: config[:winrm_basic_auth_only],
+          ssl: config[:winrm_ssl],
+          ssl_peer_fingerprint: config[:winrm_ssl_peer_fingerprint]
+
+          # NOTE: 'ssl' true is different from using the ssl auth protocol which supoorts
+          #       using client cert+key (though we dongtgt
         }
+
+        if opts[:ssh_identity_file]
+          opts[:keys_only] = true
+          opts[:key_files] << config[:ssh_identity_file]
+        end
+
+        if config[:ssh_gateway]
+          gw_host, gw_user = config[:ssh_gateway].split("@").reverse
+          gw_host, gw_port = gw_host.split(":")
+          opts[:bastion_host] = gw_host
+          opts[:bastion_port] = gw_port
+          opts[:bastion_user] = gw_user
+          if config[:ssh_gatway_identity]
+            opts[:key_files] << config[:ssh_gateway_identity]
+          end
+        end
 
         if config[:use_sudo]
           opts[:sudo] = true
-          # TODO this preserves original logic - we're using the provided password for sudo
-          # if sudo is enabled.  Note that train supports a separate sudo password.
-          # TODO - check original, what if password was not given? Where do we validate?
           if opts[:use_sudo_password]
             opts[:sudo_password] = config[:password]
           end
@@ -299,38 +332,34 @@ class Chef
           end
         end
 
+        # REVIEWERS - maybe we combine this and winrm_no_verify_cert flags into "--no-verify-target"?
+        opts[:host_key_verify] = config[:host_key_verify].nil? ? true : config[:host_key_verify]
+
         if config[:password]
           opts[:password] = config[:password]
         end
 
-        if config[:ssh_identity_file]
-          # TODO - to get the matching original knife bootstrap fallback behavior of prompting for password
-          # when we don't provide it, I think we'll want  to _not_ do this here - we should get automatic
-          # keyboard-interactive auth if we don't set this and key fails.
-          opts[:keys_only] = true
+
+        opts[:winrm_transport] = config[:winrm_auth_method]
+        if config[:winrm_auth_method] == "kerberos"
+          opts[:kerberos_service] = config[:kerberos_service]
+          opts[:kerberos_realm] = config[:kerberos_realm]
         end
-        # ssh.config[:ssh_gateway_identity] = config[:ssh_gateway_identity]
-        # ssh.config[:forward_agent] = config[:forward_agent]
-        # ssh.config[:ssh_identity_file] = config[:ssh_identity_file]
-        # ssh.config[:manual] = true
-        # TODO train appears to false this to always false.  We'll need to make it an option.
-        # ssh.config[:host_key_verify] = config[:host_key_verify]
-        # ssh.config[:on_error] = true
-        # TODO: proxy command
-        # TODO - ssh_identity_file and ssh_gateway_identity appear to be implemented
-        #        as mutually exclsuive in knife ssh. Is there a valid case for two keys?
-        #        If so, train should accept more than one.
-        # key_files << config[:ssh_identity_file]
-        # TODO _ we're forcing knife ssh :on_error to true which will cause immediate exit on problem.
-        #        Need to see what that means, and if we have to implement anything in train to support it.
-        # option :on_error,
-        # short: "-e",
-        # long: "--exit-on-error",
-        # description: "Immediately exit if an error is encountered.",
+
+        opts[:ca_trust_path] = config[:ca_trust_path]
+
+        opts[:winrm_basic_auth_only] = config[:winrm_basic_auth_only] if config[:winrm_basic_auth_only]
         opts
       end
 
 
+      def update_connection_opts_for_forced_password(opts, password)
+        opts[:password] = password
+        opts[:non_interactive] = false
+        opts[:keys_only] = false
+        opts[:key_files] = nil
+        opts[:auth_methods] = [:password, :keyboard_interactive]
+      end
 
       def render_and_upload_bootstrap
         content = render_template

@@ -19,19 +19,27 @@ class Chef
   class Knife
     class Bootstrap
       module Options
+        # REVIEWER: let's talk about which protocols we want to support.
+        # TODO this should be available from train, which we can make our source of truth.
+        # TODO - we don't actually validate that the protocol is valid...
+        WINRM_AUTH_PROTOCOL_LIST = %w{plaintext kerberos ssl negotiate}
+
         def self.included(includer)
           includer.class_eval do
             # Common connectivity options
+            # TODO - renamed --ssh-user -> --ssh-password
             option :user,  # TODO - deprecate ssh_user which this replaces
               short: "-u USERNAME",
               long: "--user USERNAME",
               description: "The remote user to connect as"
 
+            # TODO - renamed --ssh-password -> --password
             option :password, # TODO - deprecate ssh_password
               short: "-P PASSWORD",
               long: "--ssh-password PASSWORD",
               description: "The password of the remote user."
 
+            # TODO - renamed --ssh-port -> --port
             option :port,
               short: "-p PORT",
               long: "--ssh-port PORT",
@@ -42,7 +50,8 @@ class Chef
             option :protocol,
               short: "-o PROTOCOL",
               long: "--protocol PROTOCOL",
-              description: "The protocol to use to connect to the target node.  Supports ssh and winrm."
+              description: "The protocol to use to connect to the target node.  Supports ssh and winrm.",
+              default: 'ssh'
 
             # TODO SSH  train gives bastion_host which seeems to map to getway/gateway_identity -
             # though not exactly.
@@ -64,9 +73,10 @@ class Chef
               proc: Proc.new { |key| Chef::Config[:knife][:ssh_gateway_identity] = key }
 
             # SSH train ssh: options[:forward_agent]
-            option :forward_agent,
+            # TODO: renamed to ssh_forward_agent from forward_agent for consistency.
+            option :ssh_forward_agent,
               short: "-A",
-              long: "--forward-agent",
+              long: "--ssh-forward-agent",
               description: "Enable SSH agent forwarding",
               boolean: true
 
@@ -77,8 +87,8 @@ class Chef
               description: "The SSH identity file used for authentication"
 
             # ssh options - train options[:verify_host_key]
-            option :host_key_verify,
-              long: "--[no-]host-key-verify",
+            option :ssh_verify_host_key,
+              long: "--ssh-[no-]verify-host-key",
               description: "Verify host key, enabled by default.",
               boolean: true,
               default: true
@@ -218,7 +228,6 @@ class Chef
                 }
 
                 # bootstrap override: url of a an installer shell script touse in place of omnitruck
-                # TODO - this replaces --msi-url out of knife windows bootstrap
                 option :bootstrap_url,
                   long: "--bootstrap-url URL",
                   description: "URL to a custom installation script",
@@ -271,88 +280,100 @@ class Chef
                     Chef::Config[:knife][:bootstrap_vault_item]
                   }
 
-                  # TODO
                   # Windows only
+
+
+                  # bootstrap template
                   option :install_as_service,
                     :long => "--install-as-service",
                     :description => "Install chef-client as a Windows service. (Windows only)",
                     :default => false
 
-                  # Windows only
-                  option :winrm_self_signed_cert,
-                    long: "--winrm-self-signed-cert",
-                    :description => "Expect a self-signed certificate when transport is 'ssl'. Defaults to false.",
-                    :default => false
+                  option :msi_url,
+                    :short => "-u URL",
+                    :long => "--msi-url URL",
+                    :description => "Location of the Chef Client MSI. The default templates will prefer to download from this location. The MSI will be downloaded from chef.io if not provided (windows).",
+                    :default => ''
 
-                  option :winrm_transport,
-                    long: "--winrm-transport TRANSPORT",
-                    :description => "Specify WinRM transport. Supported values are ssl, plaintext, Defaults to 'negotiate'.",
-                    :default => "negotiate"
+                  # TODO - may not need, current method works in powershell
+                  # option :winrm_codepage,
+                  #   :long => "--winrm-codepage Codepage",
+                  #   :description => "The codepage to use for the winrm cmd shell",
+                  #   :default => 65001
+
+                  # TODO - bootstrap
+                  option :winrm_ssl_peer_fingerprint,
+                    :long => "--winrm-ssl-peer-fingerprint FINGERPRINT",
+                    :description => "ssl Cert Fingerprint to bypass normal cert chain checks"
+
+                  # NOTE:removed.  winrm_port -> port
+                  # option :winrm_port,
+
+                  # NOTE: removed; was in general options for winrm,
+                  # but bootstrap previously only supported :cmd;
+                  # under train it supports only :powershell
+
+                  # option :winrm_shell
+
+                  # TODO - need to understand when this is relevant. Was not exposed
+                  #        in knife windows, but is exposed in train.
+                  # option :winrm_basic_auth_only,
+                  #   long: "--winrm-basic-auth-only",
+                  #   description: "Force Basic authentication for WinRM",
+                  #   default: false
+
+                  option :ca_trust_path,
+                    :short => "-f CA_TRUST_PATH",
+                    :long => "--ca-trust-file CA_TRUST_PATH",
+                    :description => "The Certificate Authority (CA) trust file used for SSL transport"
+
+                  option :winrm_no_verify_cert,
+                    long: "--winrm-no-verify-cert",
+                    description: "Do not verify the SSL certificate of the target node for WinRM. Defaults to true.",
+                    default: false
+
 
                   option :winrm_ssl,
                     long: "--winrm-ssl",
-                    :description => "Connect to WinRM over HTTPS. Defaults to false",
-                    :default => false
+                    description: "Connect to WinRM using SSL",
+                    boolean: true
 
-                  option :winrm_codepage,
-                    :long => "--winrm-codepage Codepage",
-                    :description => "The codepage to use for the winrm cmd shell",
-                    :default => 65001
-                  # TODO - bootstrap - compat in train?
-                  option :ssl_peer_fingerprint,
-                    :long => "--ssl-peer-fingerprint FINGERPRINT",
-                    :description => "ssl Cert Fingerprint to bypass normal cert chain checks"
+                  option :winrm_auth_method,
+                    :short => "-w AUTH-METHOD",
+                    :long => "--winrm-auth-method AUTH-METHOD",
+                    :description => "The WinRM authentication method to use. Valid choices are #{WINRM_AUTH_PROTOCOL_LIST}",
+                    :default => "negotiate"
 
-                  option :winrm_port,
-                    :short => "-p PORT",
-                    :long => "--winrm-port PORT",
-                    :description => "The WinRM port, by default this is '5985' for 'plaintext' and '5986' for 'ssl' winrm transport",
-                    :default => '5985',
-                    :proc => Proc.new { |key| Chef::Config[:knife][:winrm_port] = key }
+                  option :winrm_basic_auth_only,
+                    long: "--winrm-basic-auth-only",
+                    description: "For WinRM basic authentication when using the 'ssl' auth method",
+                    default: false,
+                    boolean: true
 
-                  option :winrm_shell, # bootstrap only works with cmd
-                    :long => "--winrm-shell SHELL",
-                    :description => "The WinRM shell type. Valid choices are [cmd, powershell, elevated]. 'elevated' runs powershell in a scheduled task",
-                    :default => :cmd,
-                    :proc => Proc.new { |shell| shell.to_sym }
-
-                  option :ca_trust_file,
-                    :short => "-f CA_TRUST_FILE",
-                    :long => "--ca-trust-file CA_TRUST_FILE",
-                    :description => "The Certificate Authority (CA) trust file used for SSL transport",
-                    :proc => Proc.new { |trust| Chef::Config[:knife][:ca_trust_file] = trust }
-
-                  option :winrm_authentication_protocol,
-                    :long => "--winrm-authentication-protocol AUTHENTICATION_PROTOCOL",
-                    :description => "The authentication protocol used during WinRM communication. The supported protocols are #{WINRM_AUTH_PROTOCOL_LIST.join(',')}. Default is 'negotiate'.",
-                    :default => "negotiate",
-                    :proc => Proc.new { |protocol| Chef::Config[:knife][:winrm_authentication_protocol] = protocol }
-                  option :winrm-ssl,
-                    winrm_transport,
-                    :short => "-w TRANSPORT",
-                    :long => "--winrm-transport TRANSPORT",
-                    :description => "The WinRM transport type. Valid choices are [ssl, plaintext]",
-                    :default => 'plaintext',
-                    :proc => Proc.new { |transport| Chef::Config[:knife][:winrm_port] = '5986' if transport == 'ssl'
-                                        Chef::Config[:knife][:winrm_transport] = transport }
-
-                  option :kerberos_keytab_file,
-                    :short => "-T KEYTAB_FILE",
-                    :long => "--keytab-file KEYTAB_FILE",
-                    :description => "The Kerberos keytab file used for authentication",
-                    :proc => Proc.new { |keytab| Chef::Config[:knife][:kerberos_keytab_file] = keytab }
+                  # This option was provided in knife bootstrap windows winrm,
+                  # but it is ignored  in knife-windows/WinrmSession.
+                  # option :kerberos_keytab_file,
+                  #   :short => "-T KEYTAB_FILE",
+                  #   :long => "--keytab-file KEYTAB_FILE",
+                  #   :description => "The Kerberos keytab file used for authentication",
+                  #   :proc => Proc.new { |keytab| Chef::Config[:knife][:kerberos_keytab_file] = keytab }
 
                   option :kerberos_realm,
                     :short => "-R KERBEROS_REALM",
                     :long => "--kerberos-realm KERBEROS_REALM",
-                    :description => "The Kerberos realm used for authentication",
-                    :proc => Proc.new { |realm| Chef::Config[:knife][:kerberos_realm] = realm }
+                    :description => "The Kerberos realm used for authentication"
 
                   option :kerberos_service,
                     :short => "-S KERBEROS_SERVICE",
                     :long => "--kerberos-service KERBEROS_SERVICE",
-                    :description => "The Kerberos service used for authentication",
-                    :proc => Proc.new { |service| Chef::Config[:knife][:kerberos_service] = service }
+                    :description => "The Kerberos service used for authentication"
+
+                    # TODO
+                  option :session_timeout,
+                    :long => "--session-timeout Minutes",
+                    :description => "The timeout for the client for the maximum length of the WinRM session",
+                    :default => 30
+
           end
         end
       end

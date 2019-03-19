@@ -78,7 +78,7 @@ class Chef
           if @chef_config[:config_log_level]
             client_rb << %Q{log_level :#{@chef_config[:config_log_level]}\n}
           else
-            client_rb << "log_level        :info\n"
+            client_rb << "log_level        :auto\n"
           end
 
           client_rb << "log_location       #{get_log_location}"
@@ -300,7 +300,7 @@ class Chef
           # The default msi path has a number of url query parameters - we attempt to substitute
           # such parameters in as long as they are provided by the template.
 
-          if @config[:msi_url].nil? || @config[:msi_url].empty?
+          if @config[:install].nil? || @config[:msi_url].empty?
             url = "https://www.chef.io/chef/download?p=windows"
             url += "&pv=#{machine_os}" unless machine_os.nil?
             url += "&m=#{machine_arch}" unless machine_arch.nil?
