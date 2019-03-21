@@ -208,20 +208,49 @@ describe Chef::Application::Client, "reconfigure" do
       end
     end
 
-    describe "--recipe-url and --local-mode" do
+    describe "--recipe-url and --local-mode with --config PATH for isolated tests" do
       let(:archive) { double }
       let(:config_exists) { false }
 
+      let(:repo_path) { "the_path_to_the_repo" }
+      let(:config_path) { File.join(repo_path, ".chef/config.rb") }
       before do
+        # Note - We set this to ensure that the config file is loaded
+        # relative to a known location (repo_path), and use that to hook
+        # file operations below.   This works within the reconfigure method itself,
+        # but it breaks down in the actual call chain:
+        #
+        # #reconfigure invokes super.reconfigure
+        # #super.reconfigure invokes Client.load_config_file
+        # Client.load_config_file invokes super.load_config_file, using
+        #   Chef::WorkstationConfigLoader (for localmode) .
+        # WorkstationConfigLoader does not look at Config.repo_path when determining
+        # where the config file is located.
+        #
+        # There are two problesm with this:
+        #  * This means that the config file is _not_ mocked for these reconfigure tests
+        #    and we run with whatever is found locally in the usual paths.
+        #  * If we set an expectation assuming those mocks are correct
+        #    (such as the test for "when there is new config" below where we check `not receive`)
+        #    the expectation fails and raises an exception as soon as we call the
+        #    function we shouldn't be  - and Applications top-level error handling will kick in
+        #
+        #    By providing an explicit config option, we ensure that
+        #    the remaining mocks will hit the right path and be valid.
+
+        # Still need to do this because Client#reconfigure expects it.
+        # TODO - this is a bug?
         allow(Chef::Config).to receive(:chef_repo_path).and_return("the_path_to_the_repo")
+
+        allow(IO).to receive(:read).with(config_path).and_return("new_config")
+        allow(File).to receive(:file?).with(config_path).and_return(config_exists)
         allow(FileUtils).to receive(:rm_rf)
         allow(FileUtils).to receive(:mkdir_p)
-        allow(app).to receive(:fetch_recipe_tarball)
-        allow(Mixlib::Archive).to receive(:new).and_return(archive)
-        allow(archive).to receive(:extract)
         allow(Chef::Config).to receive(:from_string)
-        allow(IO).to receive(:read).with(File.join("the_path_to_the_repo", ".chef/config.rb")).and_return("new_config")
-        allow(File).to receive(:file?).with(File.join("the_path_to_the_repo", ".chef/config.rb")).and_return(config_exists)
+        allow(Mixlib::Archive).to receive(:new).and_return(archive)
+
+        allow(archive).to receive(:extract)
+        allow(app).to receive(:fetch_recipe_tarball)
       end
 
       context "local mode not set" do
@@ -234,17 +263,17 @@ describe Chef::Application::Client, "reconfigure" do
 
       context "local mode set" do
         before do
-          ARGV.replace(["--local-mode", "--recipe-url=test_url"])
+          ARGV.replace(["--local-mode", "--recipe-url=test_url", "--config", config_path])
         end
 
         context "--delete-entire-chef-repo" do
           before do
-            ARGV.replace(["--local-mode", "--recipe-url=test_url", "--delete-entire-chef-repo"])
+            ARGV.replace(["--local-mode", "--recipe-url=test_url", "--delete-entire-chef-repo", "--config", config_path])
           end
 
           it "deletes the repo" do
             expect(FileUtils).to receive(:rm_rf)
-              .with("the_path_to_the_repo", secure: true)
+              .with(repo_path, secure: true)
 
             app.reconfigure
           end
@@ -264,25 +293,25 @@ describe Chef::Application::Client, "reconfigure" do
 
         it "makes the repo path" do
           expect(FileUtils).to receive(:mkdir_p)
-            .with("the_path_to_the_repo")
+            .with(repo_path)
 
           app.reconfigure
         end
 
         it "fetches the tarball" do
           expect(app).to receive(:fetch_recipe_tarball)
-            .with("test_url", File.join("the_path_to_the_repo", "recipes.tgz"))
+            .with("test_url", File.join(repo_path, "recipes.tgz"))
 
           app.reconfigure
         end
 
         it "extracts the archive" do
           expect(Mixlib::Archive).to receive(:new)
-            .with(File.join("the_path_to_the_repo", "recipes.tgz"))
+            .with(File.join(repo_path, "recipes.tgz"))
             .and_return(archive)
 
           expect(archive).to receive(:extract)
-            .with("the_path_to_the_repo", perms: false, ignore: /^\.$/)
+            .with(repo_path, perms: false, ignore: /^\.$/)
 
           app.reconfigure
         end
@@ -294,7 +323,7 @@ describe Chef::Application::Client, "reconfigure" do
             expect(Chef::Config).to receive(:from_string)
               .with(
                 "new_config",
-                File.join("the_path_to_the_repo", ".chef/config.rb")
+                File.join(repo_path, ".chef/config.rb")
               )
 
             app.reconfigure
