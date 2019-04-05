@@ -22,9 +22,13 @@ rubygems:
 docker_images:
   - chef
 
-habitat_packages:
-  - chef-client:
-      also_build_for_linux_kernel2: true
+pipelines:
+  - habitat/build
+  - omnibus/release
+  - omnibus/adhoc:
+      definition: .expeditor/release.omnibus.yml
+      env:
+        - ADHOC: true
 
 github:
   # The file where the MAJOR.MINOR.PATCH version is kept. The version in this file
