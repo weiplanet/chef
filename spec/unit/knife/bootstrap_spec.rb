@@ -51,13 +51,14 @@ describe Chef::Knife::Bootstrap do
     end
   end
 
-  context "#render_template - when using the chef-full default template" do
+  context "#render_template - when using the chef-full default template", :focus do
     let(:rendered_template) do
       knife.merge_configs
       knife.render_template
     end
 
     it "should render client.rb" do
+      puts rendered_template
       expect(rendered_template).to match("cat > /etc/chef/client.rb <<'EOP'")
       expect(rendered_template).to match("chef_server_url  \"https://localhost:443\"")
       expect(rendered_template).to match("validation_client_name \"chef-validator\"")
@@ -1777,27 +1778,37 @@ describe Chef::Knife::Bootstrap do
 
   describe "#config_value" do
     before do
-      knife.config[:test_key_a] = "a from cli"
-      knife.config[:test_key_b] = "b from cli"
-      Chef::Config[:knife][:test_key_a] = "a from Chef::Config"
-      Chef::Config[:knife][:test_key_c] = "c from Chef::Config"
-      Chef::Config[:knife][:alt_test_key_c] = "alt c from Chef::Config"
+
+      # Make sure this is in classs.options, or else merge_configs won't see it
+      # since it's not a declared option
+      knife.class.options[:ssh_user] = knife.class.options[:connection_user]
+      knife.class.options[:winrm_user] = knife.class.options[:connection_user]
+
+      knife.config[:connection_protocol] = "connection_protocol from CLI"
+      knife.config[:connection_user] = "connection_user_from CLI"
+      knife.config[:password] = "password from CLI"
+
+      Chef::Config.knife.connection_protocol = "connection_protocol from Chef::Config"
+      Chef::Config.knife.ssh_user = "ssh user from Chef::Config"
+      Chef::Config.knife.winrm_user = "winrm user from Chef::Config"
+      knife.merge_configs
+
     end
 
     it "returns CLI value when key is only provided by the CLI" do
-      expect(knife.config_value(:test_key_b)).to eq "b from cli"
+      expect(knife.config_value(:password)).to eq "password from CLI"
     end
 
     it "returns CLI value when key is provided by CLI and Chef::Config" do
-      expect(knife.config_value(:test_key_a)).to eq "a from cli"
+      expect(knife.config_value(:connection_protocol)).to eq "connection_protocol from CLI"
     end
 
-    it "returns Chef::Config value whent he key is only provided by Chef::Config" do
-      expect(knife.config_value(:test_key_c)).to eq "c from Chef::Config"
+    it "returns Chef::Config value when the key is only provided by Chef::Config" do
+      expect(knife.config_value(:ssh_user)).to eq "ssh user from Chef::Config"
     end
 
     it "returns the Chef::Config value from the alternative key when the CLI key is not set" do
-      expect(knife.config_value(:test_key_c, :alt_test_key_c)).to eq "alt c from Chef::Config"
+      expect(knife.config_value(:bad_key, :winrm_user)).to eq "winrm user from Chef::Config"
     end
 
     it "returns the default value when the key is not provided by CLI or Chef::Config" do

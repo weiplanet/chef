@@ -28,21 +28,19 @@ class Chef
     class Bootstrap < Knife
       class ClientBuilder
 
-        # @return [Hash] knife merged config, typically @config
-        attr_accessor :knife_config
-        # @return [Hash] chef config object
-        attr_accessor :chef_config
+        # @return [Hash] merged hash of CLI and knife config
+        attr_accessor :config
         # @return [Chef::Knife::UI] ui object for output
         attr_accessor :ui
         # @return [Chef::ApiClient] client saved on run
         attr_reader :client
 
-        # @param knife_config [Hash] Hash of knife config settings
-        # @param chef_config [Hash] Hash of chef config settings
+        # @param config [Hash] Hash of knife config settings
+        # @param config [Hash] Hash of chef config settings
         # @param ui [Chef::Knife::UI] UI object for output
-        def initialize(knife_config: {}, chef_config: {}, ui: nil)
-          @knife_config = knife_config
-          @chef_config  = chef_config
+        def initialize(config: {}, ui: nil)
+          @config = config
+          @config  = config
           @ui           = ui
         end
 
@@ -78,39 +76,39 @@ class Chef
 
         private
 
-        # @return [String] node name from the knife_config
+        # @return [String] node name from the config
         def node_name
-          knife_config[:chef_node_name]
+          config[:chef_node_name]
         end
 
-        # @return [String] enviroment from the knife_config
+        # @return [String] enviroment from the config
         def environment
-          knife_config[:environment]
+          config[:environment]
         end
 
-        # @return [String] run_list from the knife_config
+        # @return [String] run_list from the config
         def run_list
-          knife_config[:run_list]
+          config[:run_list]
         end
 
-        # @return [String] policy_name from the knife_config
+        # @return [String] policy_name from the config
         def policy_name
-          knife_config[:policy_name]
+          config[:policy_name]
         end
 
-        # @return [String] policy_group from the knife_config
+        # @return [String] policy_group from the config
         def policy_group
-          knife_config[:policy_group]
+          config[:policy_group]
         end
 
-        # @return [Hash,Array] Object representation of json first-boot attributes from the knife_config
+        # @return [Hash,Array] Object representation of json first-boot attributes from the config
         def first_boot_attributes
-          knife_config[:first_boot_attributes]
+          config[:first_boot_attributes]
         end
 
         # @return [String] chef server url from the Chef::Config
         def chef_server_url
-          chef_config[:chef_server_url]
+          config[:chef_server_url]
         end
 
         # Accesses the run_list and coerces it into an Array, changing nils into
@@ -155,7 +153,7 @@ class Chef
               node.environment(environment) if environment
               node.policy_name = policy_name if policy_name
               node.policy_group = policy_group if policy_group
-              (knife_config[:tags] || []).each do |tag|
+              (config[:tags] || []).each do |tag|
                 node.tags << tag
               end
               node

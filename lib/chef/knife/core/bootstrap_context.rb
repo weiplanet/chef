@@ -26,17 +26,17 @@ class Chef
       # Instances of BootstrapContext are the context objects (i.e., +self+) for
       # bootstrap templates. For backwards compatibility, they +must+ set the
       # following instance variables:
-      # * @config   - a hash of knife's config values
+      # * @config   - a hash of knife's @config values
       # * @run_list - the run list for the node to boostrap
       #
       class BootstrapContext
 
         attr_accessor :client_pem
+        attr_reader :config
 
-        def initialize(config, run_list, chef_config, secret = nil)
+        def initialize(config, run_list, secret = nil)
           @config       = config
           @run_list     = run_list
-          @chef_config  = chef_config
           @secret       = secret
         end
 
@@ -45,9 +45,9 @@ class Chef
         end
 
         def validation_key
-          if @chef_config[:validation_key] &&
-              File.exist?(File.expand_path(@chef_config[:validation_key]))
-            IO.read(File.expand_path(@chef_config[:validation_key]))
+          if @config[:validation_key] &&
+              File.exist?(File.expand_path(@config[:validation_key]))
+            IO.read(File.expand_path(@config[:validation_key]))
           else
             false
           end
@@ -68,31 +68,32 @@ class Chef
         end
 
         def get_log_location
-          if !(@chef_config[:config_log_location].class == IO ) && (@chef_config[:config_log_location].nil? || @chef_config[:config_log_location].to_s.empty?)
+          if !(@config[:config_log_location].class == IO ) && (@config[:config_log_location].nil? || @config[:config_log_location].to_s.empty?)
             "STDOUT"
-          elsif @chef_config[:config_log_location].equal?(:win_evt)
-            raise "The value :win_evt is not supported for config_log_location on Linux Platforms \n"
-          elsif @chef_config[:config_log_location].equal?(:syslog)
+          elsif @config[:config_log_location].equal?(:win_evt)
+            raise "The value :win_evt is not supported for @config_log_location on Linux Platforms \n"
+          elsif @config[:config_log_location].equal?(:syslog)
             ":syslog"
-          elsif @chef_config[:config_log_location].equal?(STDOUT)
+          elsif @config[:config_log_location].equal?(STDOUT)
             "STDOUT"
-          elsif @chef_config[:config_log_location].equal?(STDERR)
+          elsif @config[:config_log_location].equal?(STDERR)
             "STDERR"
-          elsif @chef_config[:config_log_location]
-            %Q{"#{@chef_config[:config_log_location]}"}
+          elsif @config[:config_log_location]
+            %Q{"#{@config[:config_log_location]}"}
           else
             "STDOUT"
           end
         end
 
         def config_content
+          require 'pry'; binding.pry
           client_rb = <<~CONFIG
-            chef_server_url  "#{@chef_config[:chef_server_url]}"
-            validation_client_name "#{@chef_config[:validation_client_name]}"
+            chef_server_url  "#{@config[:chef_server_url]}"
+            validation_client_name "#{@config[:validation_client_name]}"
           CONFIG
 
-          if !(@chef_config[:config_log_level].nil? || @chef_config[:config_log_level].empty?)
-            client_rb << %Q{log_level   :#{@chef_config[:config_log_level]}\n}
+          if !(@config[:config_log_level].nil? || @config[:config_log_level].empty?)
+            client_rb << %Q{log_level   :#{@config[:config_log_level]}\n}
           end
 
           client_rb << "log_location   #{get_log_location}\n"
@@ -103,23 +104,23 @@ class Chef
             client_rb << "# Using default node name (fqdn)\n"
           end
 
-          # We configure :verify_api_cert only when it's overridden on the CLI
-          # or when specified in the knife config.
-          if !@config[:node_verify_api_cert].nil? || knife_config.key?(:verify_api_cert)
-            value = @config[:node_verify_api_cert].nil? ? knife_config[:verify_api_cert] : @config[:node_verify_api_cert]
+          # We @configure :verify_api_cert only when it's overridden on the CLI
+          # or when specified in the knife @config.
+          if !@config[:node_verify_api_cert].nil? || @config.key?(:verify_api_cert)
+            value = @config[:node_verify_api_cert].nil? ? @config[:verify_api_cert] : @config[:node_verify_api_cert]
             client_rb << %Q{verify_api_cert #{value}\n}
           end
 
-          # We configure :ssl_verify_mode only when it's overridden on the CLI
-          # or when specified in the knife config.
-          if @config[:node_ssl_verify_mode] || knife_config.key?(:ssl_verify_mode)
+          # We @configure :ssl_verify_mode only when it's overridden on the CLI
+          # or when specified in the knife @config.
+          if @config[:node_ssl_verify_mode] || @config.key?(:ssl_verify_mode)
             value = case @config[:node_ssl_verify_mode]
                     when "peer"
                       :verify_peer
                     when "none"
                       :verify_none
                     when nil
-                      knife_config[:ssl_verify_mode]
+                      @config[:ssl_verify_mode]
                     else
                       nil
                     end
@@ -130,26 +131,26 @@ class Chef
           end
 
           if @config[:ssl_verify_mode]
-            client_rb << %Q{ssl_verify_mode :#{knife_config[:ssl_verify_mode]}\n}
+            client_rb << %Q{ssl_verify_mode :#{@config[:ssl_verify_mode]}\n}
           end
 
-          if knife_config[:bootstrap_proxy]
-            client_rb << %Q{http_proxy        "#{knife_config[:bootstrap_proxy]}"\n}
-            client_rb << %Q{https_proxy       "#{knife_config[:bootstrap_proxy]}"\n}
+          if @config[:bootstrap_proxy]
+            client_rb << %Q{http_proxy        "#{@config[:bootstrap_proxy]}"\n}
+            client_rb << %Q{https_proxy       "#{@config[:bootstrap_proxy]}"\n}
           end
 
-          if knife_config[:bootstrap_proxy_user]
-            client_rb << %Q{http_proxy_user   "#{knife_config[:bootstrap_proxy_user]}"\n}
-            client_rb << %Q{https_proxy_user  "#{knife_config[:bootstrap_proxy_user]}"\n}
+          if @config[:bootstrap_proxy_user]
+            client_rb << %Q{http_proxy_user   "#{@config[:bootstrap_proxy_user]}"\n}
+            client_rb << %Q{https_proxy_user  "#{@config[:bootstrap_proxy_user]}"\n}
           end
 
-          if knife_config[:bootstrap_proxy_pass]
-            client_rb << %Q{http_proxy_pass   "#{knife_config[:bootstrap_proxy_pass]}"\n}
-            client_rb << %Q{https_proxy_pass  "#{knife_config[:bootstrap_proxy_pass]}"\n}
+          if @config[:bootstrap_proxy_pass]
+            client_rb << %Q{http_proxy_pass   "#{@config[:bootstrap_proxy_pass]}"\n}
+            client_rb << %Q{https_proxy_pass  "#{@config[:bootstrap_proxy_pass]}"\n}
           end
 
-          if knife_config[:bootstrap_no_proxy]
-            client_rb << %Q{no_proxy       "#{knife_config[:bootstrap_no_proxy]}"\n}
+          if @config[:bootstrap_no_proxy]
+            client_rb << %Q{no_proxy       "#{@config[:bootstrap_no_proxy]}"\n}
           end
 
           if encrypted_data_bag_secret
@@ -165,7 +166,7 @@ class Chef
               fips true
               require "chef/version"
               chef_version = ::Chef::VERSION.split(".")
-              unless chef_version[0].to_i > 12 || (chef_version[0].to_i == 12 && chef_version[1].to_i >= 8)
+              unless chef_version[0].to_i > 12 || (chef_version[0].to_i == 12 && chef_version[1].to_i >= 20)
                 raise "FIPS Mode requested but not supported by this client"
               end
             CONFIG
@@ -175,8 +176,8 @@ class Chef
         end
 
         def start_chef
-          # If the user doesn't have a client path configure, let bash use the PATH for what it was designed for
-          client_path = @chef_config[:chef_client_path] || "chef-client"
+          # If the user doesn't have a client path @configure, let bash use the PATH for what it was designed for
+          client_path = @config[:chef_client_path] || "chef-client"
           s = "#{client_path} -j /etc/chef/first-boot.json"
           if @config[:verbosity] && @config[:verbosity] >= 3
             s << " -l trace"
@@ -188,34 +189,17 @@ class Chef
           s
         end
 
-        def knife_config
-          @chef_config.key?(:knife) ? @chef_config[:knife] : {}
-        end
-
         #
         # chef version string to fetch the latest current version from omnitruck
         # If user is on X.Y.Z bootstrap will use the latest X release
         # X here can be 10 or 11
         def latest_current_chef_version_string
-          installer_version_string = nil
-          if @config[:prerelease]
-            installer_version_string = ["-p"]
-          else
-            chef_version_string = if knife_config[:bootstrap_version]
-                                    knife_config[:bootstrap_version]
-                                  else
-                                    Chef::VERSION.split(".").first
-                                  end
-
-            installer_version_string = ["-v", chef_version_string]
-
-            # If bootstrapping a pre-release version add -p to the installer string
-            if chef_version_string.split(".").length > 3
-              installer_version_string << "-p"
-            end
-          end
-
-          installer_version_string.join(" ")
+          chef_version_string = if @config[:bootstrap_version]
+                                  @config[:bootstrap_version]
+                                else
+                                  Chef::VERSION.split(".").first
+                                end
+          "-v #{chef_version_string}"
         end
 
         def first_boot
@@ -238,8 +222,8 @@ class Chef
         # This string should contain both the commands necessary to both create the files, as well as their content
         def trusted_certs_content
           content = ""
-          if @chef_config[:trusted_certs_dir]
-            Dir.glob(File.join(Chef::Util::PathHelper.escape_glob_dir(@chef_config[:trusted_certs_dir]), "*.{crt,pem}")).each do |cert|
+          if @config[:trusted_certs_dir]
+            Dir.glob(File.join(Chef::Util::PathHelper.escape_glob_dir(@config[:trusted_certs_dir]), "*.{crt,pem}")).each do |cert|
               content << "cat > /etc/chef/trusted_certs/#{File.basename(cert)} <<'EOP'\n" +
                 IO.read(File.expand_path(cert)) + "\nEOP\n"
             end
@@ -249,8 +233,8 @@ class Chef
 
         def client_d_content
           content = ""
-          if @chef_config[:client_d_dir] && File.exist?(@chef_config[:client_d_dir])
-            root = Pathname(@chef_config[:client_d_dir])
+          if @config[:client_d_dir] && File.exist?(@config[:client_d_dir])
+            root = Pathname(@config[:client_d_dir])
             root.find do |f|
               relative = f.relative_path_from(root)
               if f != root
@@ -266,7 +250,6 @@ class Chef
           end
           content
         end
-
       end
     end
   end

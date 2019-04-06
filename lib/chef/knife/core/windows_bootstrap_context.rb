@@ -25,36 +25,25 @@ class Chef
       # Instances of BootstrapContext are the context objects (i.e., +self+) for
       # bootstrap templates. For backwards compatability, they +must+ set the
       # following instance variables:
-      # * @config   - a hash of knife's config values
+      # * config   - a hash of knife's config values
       # * @run_list - the run list for the node to boostrap
       #
       class WindowsBootstrapContext < BootstrapContext
 
-        def initialize(config, run_list, chef_config, secret = nil)
-          @config       = config
-          @run_list     = run_list
-          @chef_config  = chef_config
-          @secret       = secret
-          # Compatibility with Chef 12 and Chef 11 versions
-          begin
-            # Pass along the secret parameter for Chef 12
-            super(config, run_list, chef_config, secret)
-          rescue ArgumentError
-            # The Chef 11 base class only has parameters for initialize
-            super(config, run_list, chef_config)
-          end
+        def initialize(config, run_list, secret = nil)
+          super
         end
 
         def validation_key
-          if File.exist?(File.expand_path(@chef_config[:validation_key]))
-            IO.read(File.expand_path(@chef_config[:validation_key]))
+          if File.exist?(File.expand_path(config[:validation_key]))
+            IO.read(File.expand_path(config[:validation_key]))
           else
             false
           end
         end
 
         def secret
-          escape_and_echo(@config[:secret])
+          escape_and_echo(config[:secret])
         end
 
         def trusted_certs_script
@@ -63,20 +52,20 @@ class Chef
 
         def config_content
           client_rb = <<~CONFIG
-            chef_server_url  "#{@chef_config[:chef_server_url]}"
-            validation_client_name "#{@chef_config[:validation_client_name]}"
+            chef_server_url  "#{config[:chef_server_url]}"
+            validation_client_name "#{config[:validation_client_name]}"
             file_cache_path   "c:/chef/cache"
             file_backup_path  "c:/chef/backup"
             cache_options     ({:path => "c:/chef/cache/checksums", :skip_expires => true})
           CONFIG
-          if @config[:chef_node_name]
-            client_rb << %Q{node_name "#{@config[:chef_node_name]}"\n}
+          if config[:chef_node_name]
+            client_rb << %Q{node_name "#{config[:chef_node_name]}"\n}
           else
             client_rb << "# Using default node name (fqdn)\n"
           end
 
-          if @chef_config[:config_log_level]
-            client_rb << %Q{log_level :#{@chef_config[:config_log_level]}\n}
+          if config[:config_log_level]
+            client_rb << %Q{log_level :#{config[:config_log_level]}\n}
           else
             client_rb << "log_level        :auto\n"
           end
@@ -85,21 +74,21 @@ class Chef
 
           # We configure :verify_api_cert only when it's overridden on the CLI
           # or when specified in the knife config.
-          if !@config[:node_verify_api_cert].nil? || knife_config.key?(:verify_api_cert)
-            value = @config[:node_verify_api_cert].nil? ? knife_config[:verify_api_cert] : @config[:node_verify_api_cert]
+          if !config[:node_verify_api_cert].nil? || config.key?(:verify_api_cert)
+            value = config[:node_verify_api_cert].nil? ? config[:verify_api_cert] : config[:node_verify_api_cert]
             client_rb << %Q{verify_api_cert #{value}\n}
           end
 
           # We configure :ssl_verify_mode only when it's overridden on the CLI
           # or when specified in the knife config.
-          if @config[:node_ssl_verify_mode] || knife_config.key?(:ssl_verify_mode)
-            value = case @config[:node_ssl_verify_mode]
+          if config[:node_ssl_verify_mode] || config.key?(:ssl_verify_mode)
+            value = case config[:node_ssl_verify_mode]
                     when "peer"
                       :verify_peer
                     when "none"
                       :verify_none
                     when nil
-                      knife_config[:ssl_verify_mode]
+                      config[:ssl_verify_mode]
                     else
                       nil
                     end
@@ -109,22 +98,22 @@ class Chef
             end
           end
 
-          if @config[:ssl_verify_mode]
-            client_rb << %Q{ssl_verify_mode :#{knife_config[:ssl_verify_mode]}\n}
+          if config[:ssl_verify_mode]
+            client_rb << %Q{ssl_verify_mode :#{config[:ssl_verify_mode]}\n}
           end
 
-          if knife_config[:bootstrap_proxy]
+          if config[:bootstrap_proxy]
             client_rb << "\n"
-            client_rb << %Q{http_proxy        "#{knife_config[:bootstrap_proxy]}"\n}
-            client_rb << %Q{https_proxy       "#{knife_config[:bootstrap_proxy]}"\n}
-            client_rb << %Q{no_proxy          "#{knife_config[:bootstrap_no_proxy]}"\n} if knife_config[:bootstrap_no_proxy]
+            client_rb << %Q{http_proxy        "#{config[:bootstrap_proxy]}"\n}
+            client_rb << %Q{https_proxy       "#{config[:bootstrap_proxy]}"\n}
+            client_rb << %Q{no_proxy          "#{config[:bootstrap_no_proxy]}"\n} if config[:bootstrap_no_proxy]
           end
 
-          if knife_config[:bootstrap_no_proxy]
-            client_rb << %Q{no_proxy       "#{knife_config[:bootstrap_no_proxy]}"\n}
+          if config[:bootstrap_no_proxy]
+            client_rb << %Q{no_proxy       "#{config[:bootstrap_no_proxy]}"\n}
           end
 
-          if @config[:secret]
+          if config[:secret]
             client_rb << %Q{encrypted_data_bag_secret "c:/chef/encrypted_data_bag_secret"\n}
           end
 
@@ -136,7 +125,7 @@ class Chef
             client_rb << <<~CONFIG
               fips true
               chef_version = ::Chef::VERSION.split(".")
-              unless chef_version[0].to_i > 12 || (chef_version[0].to_i == 12 && chef_version[1].to_i >= 8)
+              unless chef_version[0].to_i > 12 || (chef_version[0].to_i == 12 && chef_version[1].to_i >= 20)
                 raise "FIPS Mode requested but not supported by this client"
               end
             CONFIG
@@ -146,18 +135,18 @@ class Chef
         end
 
         def get_log_location
-          if @chef_config[:config_log_location].equal?(:win_evt)
-            %Q{:#{@chef_config[:config_log_location]}\n}
-          elsif @chef_config[:config_log_location].equal?(:syslog)
+          if config[:config_log_location].equal?(:win_evt)
+            %Q{:#{config[:config_log_location]}\n}
+          elsif config[:config_log_location].equal?(:syslog)
             raise "syslog is not supported for log_location on Windows OS\n"
-          elsif @chef_config[:config_log_location].equal?(STDOUT)
+          elsif config[:config_log_location].equal?(STDOUT)
             "STDOUT\n"
-          elsif @chef_config[:config_log_location].equal?(STDERR)
+          elsif config[:config_log_location].equal?(STDERR)
             "STDERR\n"
-          elsif @chef_config[:config_log_location].nil? || @chef_config[:config_log_location].empty?
+          elsif config[:config_log_location].nil? || config[:config_log_location].empty?
             "STDOUT\n"
-          elsif @chef_config[:config_log_location]
-            %Q{"#{@chef_config[:config_log_location]}"\n}
+          elsif config[:config_log_location]
+            %Q{"#{config[:config_log_location]}"\n}
           else
             "STDOUT\n"
           end
@@ -170,25 +159,13 @@ class Chef
         end
 
         def latest_current_windows_chef_version_query
-          installer_version_string = nil
-          if @config[:prerelease]
-            installer_version_string = "&prerelease=true"
-          else
-            chef_version_string = if knife_config[:bootstrap_version]
-                                    knife_config[:bootstrap_version]
-                                  else
-                                    Chef::VERSION.split(".").first
-                                  end
+          chef_version_string = if config[:bootstrap_version]
+                                  config[:bootstrap_version]
+                                else
+                                  Chef::VERSION.split(".").first
+                                end
 
-            installer_version_string = "&v=#{chef_version_string}"
-
-            # If bootstrapping a pre-release version add the prerelease query string
-            if chef_version_string.split(".").length > 3
-              installer_version_string << "&prerelease=true"
-            end
-          end
-
-          installer_version_string
+          "&v=#{chef_version_string}"
         end
 
         def win_wget
@@ -300,14 +277,14 @@ class Chef
           # The default msi path has a number of url query parameters - we attempt to substitute
           # such parameters in as long as they are provided by the template.
 
-          if @config[:install].nil? || @config[:msi_url].empty?
+          if config[:install].nil? || config[:msi_url].empty?
             url = "https://www.chef.io/chef/download?p=windows"
             url += "&pv=#{machine_os}" unless machine_os.nil?
             url += "&m=#{machine_arch}" unless machine_arch.nil?
             url += "&DownloadContext=#{download_context}" unless download_context.nil?
             url += latest_current_windows_chef_version_query
           else
-            @config[:msi_url]
+            config[:msi_url]
           end
         end
 
@@ -325,7 +302,7 @@ class Chef
         private
 
         def install_command(executor_quote)
-          if @config[:install_as_service]
+          if config[:install_as_service]
             "msiexec /qn /log #{executor_quote}%CHEF_CLIENT_MSI_LOG_PATH%#{executor_quote} /i #{executor_quote}%LOCAL_DESTINATION_MSI_PATH%#{executor_quote} ADDLOCAL=#{executor_quote}ChefClientFeature,ChefServiceFeature#{executor_quote}"
           else
             "msiexec /qn /log #{executor_quote}%CHEF_CLIENT_MSI_LOG_PATH%#{executor_quote} /i #{executor_quote}%LOCAL_DESTINATION_MSI_PATH%#{executor_quote}"
@@ -336,8 +313,8 @@ class Chef
         # This string should contain both the commands necessary to both create the files, as well as their content
         def trusted_certs_content
           content = ""
-          if @chef_config[:trusted_certs_dir]
-            Dir.glob(File.join(Chef::Util::PathHelper.escape_glob_dir(@chef_config[:trusted_certs_dir]), "*.{crt,pem}")).each do |cert|
+          if config[:trusted_certs_dir]
+            Dir.glob(File.join(Chef::Util::PathHelper.escape_glob_dir(config[:trusted_certs_dir]), "*.{crt,pem}")).each do |cert|
               content << "> #{bootstrap_directory}/trusted_certs/#{File.basename(cert)} (\n" +
                 escape_and_echo(IO.read(File.expand_path(cert))) + "\n)\n"
             end
@@ -347,8 +324,8 @@ class Chef
 
         def client_d_content
           content = ""
-          if @chef_config[:client_d_dir] && File.exist?(@chef_config[:client_d_dir])
-            root = Pathname(@chef_config[:client_d_dir])
+          if config[:client_d_dir] && File.exist?(config[:client_d_dir])
+            root = Pathname(config[:client_d_dir])
             root.find do |f|
               relative = f.relative_path_from(root)
               if f != root

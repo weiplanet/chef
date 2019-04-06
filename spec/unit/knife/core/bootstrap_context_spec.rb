@@ -26,9 +26,8 @@ describe Chef::Knife::Core::BootstrapContext do
     Chef::Config[:fips] = false
   end
 
-  let(:config) { { foo: :bar, color: true } }
   let(:run_list) { Chef::RunList.new("recipe[tmux]", "role[base]") }
-  let(:chef_config) do
+  let(:config) do
     {
       config_log_level: "info",
       config_log_location: "/tmp/log",
@@ -40,10 +39,10 @@ describe Chef::Knife::Core::BootstrapContext do
 
   let(:secret) { nil }
 
-  subject(:bootstrap_context) { described_class.new(config, run_list, chef_config, secret) }
+  subject(:bootstrap_context) { described_class.new(config, run_list, secret) }
 
   it "initializes with Chef 11 parameters" do
-    expect { described_class.new(config, run_list, chef_config) }.not_to raise_error
+    expect { described_class.new(config, run_list, config) }.not_to raise_error
   end
 
   it "runs chef with the first-boot.json with no environment specified" do
@@ -80,14 +79,14 @@ describe Chef::Knife::Core::BootstrapContext do
   end
 
   describe "alternate chef-client path" do
-    let(:chef_config) { { chef_client_path: "/usr/local/bin/chef-client" } }
+    let(:config) { { chef_client_path: "/usr/local/bin/chef-client" } }
     it "runs chef-client from another path when specified" do
       expect(bootstrap_context.start_chef).to eq "/usr/local/bin/chef-client -j /etc/chef/first-boot.json"
     end
   end
 
   describe "validation key path that contains a ~" do
-    let(:chef_config) { { validation_key: "~/my.key" } }
+    let(:config) { { validation_key: "~/my.key" } }
     it "reads the validation key when it contains a ~" do
       expect(File).to receive(:exist?).with(File.expand_path("my.key", ENV["HOME"])).and_return(true)
       expect(IO).to receive(:read).with(File.expand_path("my.key", ENV["HOME"]))
@@ -157,7 +156,7 @@ describe Chef::Knife::Core::BootstrapContext do
   end
 
   describe "when a bootstrap_version is specified" do
-    let(:chef_config) do
+    let(:config) do
       {
         knife: { bootstrap_version: "11.12.4" },
       }
@@ -169,7 +168,7 @@ describe Chef::Knife::Core::BootstrapContext do
   end
 
   describe "when a pre-release bootstrap_version is specified" do
-    let(:chef_config) do
+    let(:config) do
       {
         knife: { bootstrap_version: "11.12.4.rc.0" },
       }
@@ -193,7 +192,7 @@ describe Chef::Knife::Core::BootstrapContext do
     end
 
     describe "when configured in config" do
-      let(:chef_config) do
+      let(:config) do
         {
           knife: { ssl_verify_mode: :verify_peer },
         }
@@ -236,7 +235,7 @@ describe Chef::Knife::Core::BootstrapContext do
     end
 
     describe "when configured in config" do
-      let(:chef_config) do
+      let(:config) do
         {
           knife: { verify_api_cert: :false },
         }
@@ -272,49 +271,49 @@ describe Chef::Knife::Core::BootstrapContext do
 
   describe "#config_log_location" do
     context "when config_log_location is nil" do
-      let(:chef_config) { { config_log_location: nil } }
+      let(:config) { { config_log_location: nil } }
       it "sets the default config_log_location  in the client.rb" do
         expect(bootstrap_context.get_log_location).to eq "STDOUT"
       end
     end
 
     context "when config_log_location is empty" do
-      let(:chef_config) { { config_log_location: "" } }
+      let(:config) { { config_log_location: "" } }
       it "sets the default config_log_location  in the client.rb" do
         expect(bootstrap_context.get_log_location).to eq "STDOUT"
       end
     end
 
     context "when config_log_location is :win_evt" do
-      let(:chef_config) { { config_log_location: :win_evt } }
+      let(:config) { { config_log_location: :win_evt } }
       it "raise error when config_log_location is :win_evt " do
         expect { bootstrap_context.get_log_location }.to raise_error("The value :win_evt is not supported for config_log_location on Linux Platforms \n")
       end
     end
 
     context "when config_log_location is :syslog" do
-      let(:chef_config) { { config_log_location: :syslog } }
+      let(:config) { { config_log_location: :syslog } }
       it "sets the config_log_location value as :syslog in the client.rb" do
         expect(bootstrap_context.get_log_location).to eq ":syslog"
       end
     end
 
     context "When config_log_location is STDOUT" do
-      let(:chef_config) { { config_log_location: STDOUT } }
+      let(:config) { { config_log_location: STDOUT } }
       it "Sets the config_log_location value as STDOUT in the client.rb" do
         expect(bootstrap_context.get_log_location).to eq "STDOUT"
       end
     end
 
     context "when config_log_location is STDERR" do
-      let(:chef_config) { { config_log_location: STDERR } }
+      let(:config) { { config_log_location: STDERR } }
       it "sets the config_log_location value as STDERR  in the client.rb" do
         expect(bootstrap_context.get_log_location).to eq "STDERR"
       end
     end
 
     context "when config_log_location is a path" do
-      let(:chef_config) { { config_log_location: "/tmp/ChefLogFile" } }
+      let(:config) { { config_log_location: "/tmp/ChefLogFile" } }
       it "sets the config_log_location path in the client.rb" do
         expect(bootstrap_context.get_log_location).to eq "\"/tmp/ChefLogFile\""
       end

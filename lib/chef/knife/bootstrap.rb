@@ -22,7 +22,6 @@ require "erubis"
 require "chef/knife/bootstrap/chef_vault_handler"
 require "chef/knife/bootstrap/client_builder"
 require "chef/util/path_helper"
-require "chef/knife/bootstrap/options"
 
 class Chef
   class Knife
@@ -32,9 +31,6 @@ class Chef
       WINRM_AUTH_PROTOCOL_LIST = %w{plaintext kerberos ssl negotiate}.freeze
 
       include DataBagSecretOptions
-      # Command line flags and options for bootstrap - there's a large number of them
-      # so we'll keep this file a little smaller by splitting them out.
-      include Bootstrap::Options
       # Common connectivity options
       option :connection_user,
         short: "-U USERNAME",
@@ -352,14 +348,21 @@ class Chef
       banner "knife bootstrap [PROTOCOL://][USER@]FQDN (options)"
 
       def initialize(argv = [])
+        # These options need to be present in the CLI options hash
+        # in order for Knife#merge_config to merge them properly
+        # with Chef::Config[:knife].
+        self.class.options[:ssh_user] = self.class.options[:connection_user]
+        self.class.options[:winrm_user] = self.class.options[:connection_user]
+        self.class.options[:ssh_port] = self.class.options[:connection_port]
+        self.class.options[:winrm_port] = self.class.options[:connection_port]
+        # knife config
         super
         @client_builder = Chef::Knife::Bootstrap::ClientBuilder.new(
-          chef_config: Chef::Config,
-          knife_config: config,
+          config: config,
           ui: ui
         )
         @chef_vault_handler = Chef::Knife::Bootstrap::ChefVaultHandler.new(
-          knife_config: config,
+          config: config,
           ui: ui
         )
       end
@@ -440,19 +443,19 @@ class Chef
         @bootstrap_context ||=
           if target_host.base_os == :windows
             require "chef/knife/core/windows_bootstrap_context"
-            Knife::Core::WindowsBootstrapContext.new(config, config[:run_list], Chef::Config, secret)
+            Knife::Core::WindowsBootstrapContext.new(config, config[:run_list], secret)
           else
             require "chef/knife/core/bootstrap_context"
-            Knife::Core::BootstrapContext.new(config, config[:run_list], Chef::Config, secret)
+            Knife::Core::BootstrapContext.new(config, config[:run_list], secret)
           end
       end
 
       def first_boot_attributes
-        @config[:first_boot_attributes] || @config[:first_boot_attributes_from_file] || {}
+        config[:first_boot_attributes] || config[:first_boot_attributes_from_file] || {}
       end
 
       def render_template
-        @config[:first_boot_attributes] = first_boot_attributes
+        config[:first_boot_attributes] = first_boot_attributes
         template_file = find_template
         template = IO.read(template_file).chomp
         Erubis::Eruby.new(template).evaluate(bootstrap_context)
@@ -574,7 +577,7 @@ class Chef
       # Fail if both first_boot_attributes and first_boot_attributes_from_file
       # are set.
       def validate_first_boot_attributes!
-        if @config[:first_boot_attributes] && @config[:first_boot_attributes_from_file]
+        if config[:first_boot_attributes] && config[:first_boot_attributes_from_file]
           raise Chef::Exceptions::BootstrapCommandInputError
         end
         true
@@ -860,7 +863,14 @@ class Chef
         }
       end
 
-      # Looks up configuration entries, first in the class member
+      #
+      # Looks up configuration entries in the config field,
+      # which is a merge of cli config + defaults + knife config
+      # Because some keys can be kept in knife config under alternative
+      # names (eg -> connection_user -> winrm_user|ssh_user),
+      # we'll fall back to lookuping up under the provided alt_config_key
+      #
+      # merged 'config' fieldLooks up configuration entries, first in the class member
       # `config` which contains options populated from CLI flags.
       # If the entry is not found there, Chef::Config[:knife][KEY]
       # is checked.
@@ -868,16 +878,13 @@ class Chef
       # knife_config_key should be specified if the knife config lookup
       # key is different from the CLI flag lookup key.
       #
-      def config_value(key, knife_config_key = nil, default = nil)
+      def config_value(key, alt_config_key = nil, default = nil)
         if config.key? key
           config[key]
+        elsif config.key? alt_config_key
+          config[alt_config_key]
         else
-          lookup_key = knife_config_key || key
-          if Chef::Config[:knife].key?(lookup_key)
-            Chef::Config[:knife][lookup_key]
-          else
-            default
-          end
+          default
         end
       end
 
