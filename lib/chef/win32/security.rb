@@ -179,9 +179,11 @@ class Chef
       end
 
       def self.equal_sid(sid1, sid2)
-        sid1 = sid1.pointer if sid1.respond_to?(:pointer)
-        sid2 = sid2.pointer if sid2.respond_to?(:pointer)
-        EqualSid(sid1, sid2)
+        if sid1.respond_to?(:pointer) && sid2.respond_to?(:pointer)
+          EqualSid(sid1.pointer, sid2.pointer)
+        else
+          Chef::ReservedNames::Win32::Error.raise!
+        end
       end
 
       def self.free_sid(sid)
