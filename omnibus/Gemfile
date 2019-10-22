@@ -1,4 +1,4 @@
-source "https://rubygems.org"
+source "https://chefhatest.jfrog.io/chefhatest/api/gems/gems-remote"
 
 gem "omnibus", git: "https://github.com/chef/omnibus", branch: "master"
 gem "omnibus-software", git: "https://github.com/chef/omnibus-software", branch: "master"
