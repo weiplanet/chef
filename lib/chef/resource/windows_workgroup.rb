@@ -75,8 +75,8 @@ class Chef
 
         unless workgroup_member?
           converge_by("join workstation workgroup #{new_resource.workgroup_name}") do
-            ps_run = powershell_out(join_command)
-            raise "Failed to join the workgroup #{new_resource.workgroup_name}: #{ps_run.stderr}}" if ps_run.error?
+            ps_run = powershell_exec(join_command)
+            raise "Failed to join the workgroup #{new_resource.workgroup_name}: #{ps_run.errors.first}}" if ps_run.error?
 
             unless new_resource.reboot == :never
               reboot "Reboot to join workgroup #{new_resource.workgroup_name}" do

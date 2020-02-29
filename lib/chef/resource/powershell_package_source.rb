@@ -78,28 +78,28 @@ class Chef
           if package_source_exists?
             converge_if_changed :url, :trusted, :publish_location, :script_source_location, :script_publish_location do
               update_cmd = build_ps_repository_command("Set", new_resource)
-              res = powershell_out(update_cmd)
-              raise "Failed to update #{new_resource.source_name}: #{res.stderr}" unless res.stderr.empty?
+              res = powershell_exec(update_cmd)
+              raise "Failed to update #{new_resource.source_name}: #{res.errors.first}" if res.error?
             end
           else
             converge_by("register source: #{new_resource.source_name}") do
               register_cmd = build_ps_repository_command("Register", new_resource)
-              res = powershell_out(register_cmd)
-              raise "Failed to register #{new_resource.source_name}: #{res.stderr}" unless res.stderr.empty?
+              res = powershell_exec(register_cmd)
+              raise "Failed to register #{new_resource.source_name}: #{res.errors.first}" if res.error?
             end
           end
         else
           if package_source_exists?
             converge_if_changed :url, :trusted, :provider_name do
               update_cmd = build_package_source_command("Set", new_resource)
-              res = powershell_out(update_cmd)
-              raise "Failed to update #{new_resource.source_name}: #{res.stderr}" unless res.stderr.empty?
+              res = powershell_exec(update_cmd)
+              raise "Failed to update #{new_resource.source_name}: #{res.errors.first}" if res.error?
             end
           else
             converge_by("register source: #{new_resource.source_name}") do
               register_cmd = build_package_source_command("Register", new_resource)
-              res = powershell_out(register_cmd)
-              raise "Failed to register #{new_resource.source_name}: #{res.stderr}" unless res.stderr.empty?
+              res = powershell_exec(register_cmd)
+              raise "Failed to register #{new_resource.source_name}: #{res.errors.first}" if res.error?
             end
           end
         end

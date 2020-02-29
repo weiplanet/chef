@@ -106,16 +106,16 @@ class Chef
         share_state_cmd = "Get-SmbShare -Name '#{desired.share_name}' | Select-Object Name,Path, Description, Temporary, CATimeout, ContinuouslyAvailable, ConcurrentUserLimit, EncryptData | ConvertTo-Json -Compress"
 
         Chef::Log.debug("Running '#{share_state_cmd}' to determine share state'")
-        ps_results = powershell_out(share_state_cmd)
+        ps_results = powershell_exec(share_state_cmd)
 
         # detect a failure without raising and then set current_resource to nil
         if ps_results.error?
-          Chef::Log.debug("Error fetching share state: #{ps_results.stderr}")
+          Chef::Log.debug("Error fetching share state: #{ps_results.errors.first}")
           current_value_does_not_exist!
         end
 
-        Chef::Log.debug("The Get-SmbShare results were #{ps_results.stdout}")
-        results = Chef::JSONCompat.from_json(ps_results.stdout)
+        Chef::Log.debug("The Get-SmbShare results were #{ps_results.result}")
+        results = ps_results.result
 
         path results["Path"]
         description results["Description"]
@@ -130,7 +130,7 @@ class Chef
         perm_state_cmd = %{Get-SmbShareAccess -Name "#{desired.share_name}" | Select-Object AccountName,AccessControlType,AccessRight | ConvertTo-Json -Compress}
 
         Chef::Log.debug("Running '#{perm_state_cmd}' to determine share permissions state'")
-        ps_perm_results = powershell_out(perm_state_cmd)
+        ps_perm_results = powershell_exec(perm_state_cmd)
 
         # we raise here instead of warning like above because we'd only get here if the above Get-SmbShare
         # command was successful and that continuing would leave us with 1/2 known state

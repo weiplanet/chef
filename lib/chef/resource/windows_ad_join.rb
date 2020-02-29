@@ -73,12 +73,12 @@ class Chef
           cmd << " -Force"
 
           converge_by("join Active Directory domain #{new_resource.domain_name}") do
-            ps_run = powershell_out(cmd)
+            ps_run = powershell_exec(cmd)
             if ps_run.error?
               if sensitive?
                 raise "Failed to join the domain #{new_resource.domain_name}: *suppressed sensitive resource output*"
               else
-                raise "Failed to join the domain #{new_resource.domain_name}: #{ps_run.stderr}"
+                raise "Failed to join the domain #{new_resource.domain_name}: #{ps_run.errors.first}"
               end
             end
 
@@ -106,12 +106,12 @@ class Chef
           cmd << " -Force"
 
           converge_by("leave Active Directory domain #{node_domain}") do
-            ps_run = powershell_out(cmd)
+            ps_run = powershell_exec(cmd)
             if ps_run.error?
               if sensitive?
                 raise "Failed to leave the domain #{node_domain}: *suppressed sensitive resource output*"
               else
-                raise "Failed to leave the domain #{node_domain}: #{ps_run.stderr}"
+                raise "Failed to leave the domain #{node_domain}: #{ps_run.errors.first}"
               end
             end
 
