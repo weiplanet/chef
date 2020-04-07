@@ -27,30 +27,20 @@ steps:
 #         image: rubydistros/ubuntu-18.04
 #         privileged: true
 
-  - env: {}
-    label: "Functional Specs Ubuntu :ruby: 2.6"
-    retry:
-      automatic:
-        limit: 1
-    agents:
-      queue: "default-privileged"
-    plugins:
-    - docker#v3.5.0:
-        image: "rubydistros/ubuntu-18.04"
-        privileged: true
-        always-pull: false
-        propagate-environment: true
-    - chef/cache#bd65b5275d780f6e3b70c93bad80ea2a7a0ff585:
-        s3_bucket: "core-buildkite-cache-chef-oss-prod"
-        cached_folders:
-        - "vendor"
+  - label: "Functional Specs Ubuntu :ruby: 2.6"
     commands:
-    - "/workdir/scripts/bk_tests/bk_container_prep.sh"
-    - "apt-get update -y"
-    - "apt-get install -y cron locales"
-    - "cd /workdir; bundle install --jobs=3 --retry=3 --path=vendor/bundle --without omnibus_package docgen ruby_prof"
-    - "bundle exec rake spec:functional"
-    timeout_in_minutes: 30
+      - /workdir/scripts/bk_tests/bk_container_prep.sh
+      - apt-get update -y
+      - apt-get install -y cron locales # needed for functional tests to pass
+      - cd /workdir; bundle install --jobs=3 --retry=3 --path=vendor/bundle --without omnibus_package docgen ruby_prof
+      - bundle exec rake spec:functional
+    expeditor:
+      cached_folders:
+        - "vendor"
+      executor:
+        docker:
+          image: rubydistros/ubuntu-18.04
+          privileged: true
 
 # - label: "Unit Specs Ubuntu :ruby: 2.6"
 #   commands:
