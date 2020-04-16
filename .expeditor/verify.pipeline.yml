@@ -27,7 +27,7 @@ steps:
 #         image: rubydistros/ubuntu-18.04
 #         privileged: true
 
-  - label: "Functional Specs Ubuntu :ruby: 2.6"
+  - label: "Functional Specs Ubuntu Priv :ruby: 2.6"
     commands:
       - /workdir/scripts/bk_tests/bk_container_prep.sh
       - apt-get update -y
@@ -42,7 +42,7 @@ steps:
           image: rubydistros/ubuntu-18.04
           privileged: true
 
-  - label: "Functional Specs Ubuntu :ruby: 2.6"
+  - label: "Functional Specs Ubuntu Unpriv :ruby: 2.6"
     commands:
       - /workdir/scripts/bk_tests/bk_container_prep.sh
       - apt-get update -y
@@ -184,7 +184,7 @@ steps:
 #           - CHEF_LICENSE=accept-no-persist
 #         shell: ["powershell", "-Command"]
 
-  - label: "Functional Specs Windows :ruby: 2.6"
+  - label: "Functional Specs Windows Priv :ruby: 2.6"
     commands:
       - scripts/bk_tests/bk_win_functional.ps1
     expeditor:
@@ -195,7 +195,7 @@ steps:
           privileged: true
           shell: ["powershell", "-Command"]
 
-  - label: "Functional Specs Windows :ruby: 2.6"
+  - label: "Functional Specs Windows Unpriv :ruby: 2.6"
     commands:
       - scripts/bk_tests/bk_win_functional.ps1
     expeditor:

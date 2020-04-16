@@ -8,7 +8,7 @@ $RubySHA256 = "BD2050496A149C7258ED4E2E44103756CA3A05C7328A939F0FDC97AE9616A96D"
 $RubyPath = "$env:temp\$RubyFilename"
 
 # Where to download Ruby from:
-$RubyS3Path = "s3://public-cd-buildkite-cache/$RubyFilename"
+$RubyS3Path = "s3://core-buildkite-cache-chef-canary-canary/$RubyFilename"
 
 Function DownloadRuby
 {
