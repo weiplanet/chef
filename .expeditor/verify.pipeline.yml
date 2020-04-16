@@ -28,11 +28,6 @@ steps:
 #         privileged: true
 
   - label: "Functional Specs Ubuntu :ruby: 2.6"
-    plugins:
-      - chef/cache#v1.2.0:
-          s3_bucket: "core-buildkite-cache-chef-canary-canary"
-          cached_folders:
-          - "vendor"
     commands:
       - /workdir/scripts/bk_tests/bk_container_prep.sh
       - apt-get update -y
@@ -40,10 +35,26 @@ steps:
       - cd /workdir; bundle install --jobs=3 --retry=3 --path=vendor/bundle --without omnibus_package docgen ruby_prof
       - bundle exec rake spec:functional
     expeditor:
+      cached_folders:
+        - "vendor"
       executor:
         docker:
           image: rubydistros/ubuntu-18.04
           privileged: true
+
+  - label: "Functional Specs Ubuntu :ruby: 2.6"
+    commands:
+      - /workdir/scripts/bk_tests/bk_container_prep.sh
+      - apt-get update -y
+      - apt-get install -y cron locales # needed for functional tests to pass
+      - cd /workdir; bundle install --jobs=3 --retry=3 --path=vendor/bundle --without omnibus_package docgen ruby_prof
+      - bundle exec rake spec:functional
+    expeditor:
+      cached_folders:
+        - "vendor"
+      executor:
+        docker:
+          image: rubydistros/ubuntu-18.04
 
 # - label: "Unit Specs Ubuntu :ruby: 2.6"
 #   commands:
@@ -173,14 +184,26 @@ steps:
 #           - CHEF_LICENSE=accept-no-persist
 #         shell: ["powershell", "-Command"]
 
-# - label: "Functional Specs Windows :ruby: 2.6"
-#   commands:
-#     - scripts/bk_tests/bk_win_functional.ps1
-#   expeditor:
-#     executor:
-#       windows:
-#         privileged: true
-#         shell: ["powershell", "-Command"]
+  - label: "Functional Specs Windows :ruby: 2.6"
+    commands:
+      - scripts/bk_tests/bk_win_functional.ps1
+    expeditor:
+      cached_folders:
+        - "vendor"
+      executor:
+        windows:
+          privileged: true
+          shell: ["powershell", "-Command"]
+
+  - label: "Functional Specs Windows :ruby: 2.6"
+    commands:
+      - scripts/bk_tests/bk_win_functional.ps1
+    expeditor:
+      cached_folders:
+        - "vendor"
+      executor:
+        windows:
+          shell: ["powershell", "-Command"]
 
 # - label: "Chocolatey Specs Windows :ruby: 2.6"
 #   commands:
