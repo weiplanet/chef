@@ -42,30 +42,18 @@ steps:
           image: rubydistros/ubuntu-18.04
           privileged: true
 
-  - label: "Functional Specs Ubuntu Unpriv :ruby: 2.6"
+  - label: "Unit Specs Ubuntu :ruby: 2.6"
     commands:
       - /workdir/scripts/bk_tests/bk_container_prep.sh
-      - apt-get update -y
-      - apt-get install -y cron locales # needed for functional tests to pass
-      - cd /workdir; bundle install --jobs=3 --retry=3 --path=vendor/bundle --without omnibus_package docgen ruby_prof
-      - bundle exec rake spec:functional
+      - bundle install --jobs=3 --retry=3 --without omnibus_package docgen ruby_prof
+      - bundle exec rake spec:unit
+      - bundle exec rake component_specs
     expeditor:
       cached_folders:
         - "vendor"
       executor:
         docker:
           image: rubydistros/ubuntu-18.04
-
-# - label: "Unit Specs Ubuntu :ruby: 2.6"
-#   commands:
-#     - /workdir/scripts/bk_tests/bk_container_prep.sh
-#     - bundle install --jobs=3 --retry=3 --without omnibus_package docgen ruby_prof
-#     - bundle exec rake spec:unit
-#     - bundle exec rake component_specs
-#   expeditor:
-#     executor:
-#       docker:
-#         image: rubydistros/ubuntu-18.04
 
 # - label: "Integration Specs CentOS :ruby: 2.6"
 #   commands:
@@ -195,16 +183,6 @@ steps:
           privileged: true
           shell: ["powershell", "-Command"]
 
-  - label: "Functional Specs Windows Unpriv :ruby: 2.6"
-    commands:
-      - scripts/bk_tests/bk_win_functional.ps1
-    expeditor:
-      cached_folders:
-        - "vendor"
-      executor:
-        windows:
-          shell: ["powershell", "-Command"]
-
 # - label: "Chocolatey Specs Windows :ruby: 2.6"
 #   commands:
 #     - /workdir/scripts/bk_tests/bk_run_choco.ps1
@@ -214,17 +192,19 @@ steps:
 #         host_os: windows
 #         shell: ["powershell", "-Command"]
 
-# - label: "Unit Specs Windows :ruby: 2.6"
-#   commands:
-#     - /workdir/scripts/bk_tests/bk_win_unit.ps1
-#   expeditor:
-#     executor:
-#       docker:
-#         host_os: windows
-#         environment:
-#           - FORCE_FFI_YAJL=ext
-#           - CHEF_LICENSE=accept-no-persist
-#         shell: ["powershell", "-Command"]
+- label: "Unit Specs Windows :ruby: 2.6"
+  commands:
+    - /workdir/scripts/bk_tests/bk_win_unit.ps1
+  expeditor:
+    cached_folders:
+      - "vendor"
+    executor:
+      docker:
+        host_os: windows
+        environment:
+          - FORCE_FFI_YAJL=ext
+          - CHEF_LICENSE=accept-no-persist
+        shell: ["powershell", "-Command"]
 
 # - label: "Chefstyle :ruby: 2.6"
 #   commands:
