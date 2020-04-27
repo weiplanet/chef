@@ -103,19 +103,19 @@ class Chef
         # this command selects individual objects because EncryptData & CachingMode have underlying
         # types that get converted to their Integer values by ConvertTo-Json & we need to make sure
         # those get written out as strings
-        share_state_cmd = "Get-SmbShare -Name '#{desired.share_name}' | Select-Object Name,Path, Description, Temporary, CATimeout, ContinuouslyAvailable, ConcurrentUserLimit, EncryptData | ConvertTo-Json -Compress"
+        share_state_cmd = "Get-SmbShare -Name '#{desired.share_name}' | Select-Object Name,Path, Description, Temporary, CATimeout, ContinuouslyAvailable, ConcurrentUserLimit, EncryptData"
 
         Chef::Log.debug("Running '#{share_state_cmd}' to determine share state'")
-        ps_results = powershell_out(share_state_cmd)
+        ps_out = powershell_exec(share_state_cmd)
 
         # detect a failure without raising and then set current_resource to nil
-        if ps_results.error?
-          Chef::Log.debug("Error fetching share state: #{ps_results.stderr}")
+        if ps_out.error?
+          Chef::Log.debug("Error fetching share state: #{ps_out.errors}")
           current_value_does_not_exist!
         end
 
-        Chef::Log.debug("The Get-SmbShare results were #{ps_results.stdout}")
-        results = Chef::JSONCompat.from_json(ps_results.stdout)
+        Chef::Log.debug("The Get-SmbShare results were #{ps_out.result}")
+        results = ps_out.result
 
         path results["Path"]
         description results["Description"]
@@ -127,32 +127,27 @@ class Chef
         encrypt_data results["EncryptData"]
         # folder_enumeration_mode results['FolderEnumerationMode']
 
-        perm_state_cmd = %{Get-SmbShareAccess -Name "#{desired.share_name}" | Select-Object AccountName,AccessControlType,AccessRight | ConvertTo-Json -Compress}
+        perm_state_cmd = %{Get-SmbShareAccess -Name "#{desired.share_name}" | Select-Object AccountName,AccessControlType,AccessRight}
 
         Chef::Log.debug("Running '#{perm_state_cmd}' to determine share permissions state'")
-        ps_perm_results = powershell_out(perm_state_cmd)
+        ps_perm_out = powershell_exec(perm_state_cmd)
 
         # we raise here instead of warning like above because we'd only get here if the above Get-SmbShare
         # command was successful and that continuing would leave us with 1/2 known state
-        raise "Could not determine #{desired.share_name} share permissions by running '#{perm_state_cmd}'" if ps_perm_results.error?
+        raise "Could not determine #{desired.share_name} share permissions by running '#{perm_state_cmd}'" if ps_perm_out.error?
 
-        Chef::Log.debug("The Get-SmbShareAccess results were #{ps_perm_results.stdout}")
+        Chef::Log.debug("The Get-SmbShareAccess results were #{ps_perm_out.result}")
 
-        f_users, c_users, r_users = parse_permissions(ps_perm_results.stdout)
+        f_users, c_users, r_users = parse_permissions(ps_perm_out.result)
 
         full_users f_users
         change_users c_users
         read_users r_users
       end
 
-      def after_created
-        raise "The windows_share resource relies on PowerShell cmdlets not present in Windows releases prior to 8/2012. Cannot continue!" if node["platform_version"].to_f < 6.3
-      end
-
-# given the string output of Get-SmbShareAccess parse out
-# arrays of full access users, change users, and read only users
-      def parse_permissions(results_string)
-        json_results = Chef::JSONCompat.from_json(results_string)
+      # given the string output of Get-SmbShareAccess parse out
+      # arrays of full access users, change users, and read only users
+      def parse_permissions(json_results)
         json_results = [json_results] unless json_results.is_a?(Array) # single result is not an array
 
         f_users = []
@@ -171,8 +166,8 @@ class Chef
         [f_users, c_users, r_users]
       end
 
-# local names are returned from Get-SmbShareAccess in the full format MACHINE\\NAME
-# but users of this resource would simply say NAME so we need to strip the values for comparison
+      # local names are returned from Get-SmbShareAccess in the full format MACHINE\\NAME
+      # but users of this resource would simply say NAME so we need to strip the values for comparison
       def stripped_account(name)
         name.slice!("#{node["hostname"]}\\")
         name
