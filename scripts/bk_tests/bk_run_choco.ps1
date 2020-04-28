@@ -1,5 +1,7 @@
-$BKScriptDir = Split-Path $script:MyInvocation.MyCommand.Path
-& "$BKScriptDir\win_setup.ps1"
+if (Test-Path env:BUILDKITE) {
+  $BKScriptDir = Split-Path $script:MyInvocation.MyCommand.Path
+  & "$BKScriptDir\win_setup.ps1"
+}
 
 echo "+++ Chocolatey version +++"
 choco --version
