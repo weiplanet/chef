@@ -71,9 +71,6 @@ Function InstallRuby
   Remove-Item $RubyPath -Force -ErrorAction SilentlyContinue
 }
 
-# chocolatey functional tests fail so delete the chocolatey binary to avoid triggering them
-Remove-Item -Path C:\ProgramData\chocolatey\bin\choco.exe -ErrorAction SilentlyContinue
-
 echo "--- install ruby + devkit"
 $ErrorActionPreference = 'Stop'
 
@@ -85,6 +82,7 @@ $Env:Path+=";C:\ruby26\bin"
 $BKScriptDir = Split-Path $script:MyInvocation.MyCommand.Path
 & "$BKScriptDir\win_setup.ps1"
 
-echo "+++ bundle exec rake spec:functional"
-bundle exec rake spec:functional
+echo "+++ bundle exec rake spec:functional (minus chocolatey tests)"
+# chocolatey functional tests are shakey so exclude them from this function test run
+bundle exec rake --tag ~choco_installed spec:functional
 if (-not $?) { throw "Chef functional specs failing." }
