@@ -18,8 +18,8 @@ GIT
 
 GIT
   remote: https://github.com/chef/omnibus-software
-  revision: 379f9c7fe65e867af2b69b28b2ced739526f9842
-  branch: master
+  revision: 10352239951cf8b4fedb9671cbd0b53bfe9a2a21
+  branch: ruby
   specs:
     omnibus-software (4.0.0)
       omnibus (>= 5.6.1)
@@ -282,7 +282,7 @@ GEM
       addressable (>= 2.3.5)
       faraday (> 0.8, < 2.0)
     semverse (3.0.0)
-    solve (4.0.3)
+    solve (4.0.4)
       molinillo (~> 0.6)
       semverse (>= 1.1, < 4.0)
     strings (0.2.0)
