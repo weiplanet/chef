@@ -70,4 +70,15 @@ describe Chef::Knife::UserList do
       knife.run
     end
   end
+
+  describe "with options gobal argument" do
+    before do
+      knife.config[:global] = true
+    end
+
+    it "lists all users including hidden users" do
+      expect(knife.ui).to receive(:output).with(%w{user1 user2})
+      knife.run
+    end
+  end
 end
