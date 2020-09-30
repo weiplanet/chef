@@ -18,8 +18,8 @@ GIT
 
 GIT
   remote: https://github.com/chef/omnibus-software
-  revision: 0e0686b82299ca2ddc6b9251319e4309142c4b7d
-  branch: master
+  revision: ee2f9f1ee66e8ed9e6e051356c02f5aaf57fa8db
+  branch: no_dev
   specs:
     omnibus-software (4.0.0)
       omnibus (>= 5.6.1)
@@ -41,8 +41,8 @@ GEM
     aws-sdk-kms (1.39.0)
       aws-sdk-core (~> 3, >= 3.109.0)
       aws-sigv4 (~> 1.1)
-    aws-sdk-s3 (1.81.1)
-      aws-sdk-core (~> 3, >= 3.104.3)
+    aws-sdk-s3 (1.82.0)
+      aws-sdk-core (~> 3, >= 3.109.0)
       aws-sdk-kms (~> 1)
       aws-sigv4 (~> 1.1)
     aws-sigv4 (1.2.2)
@@ -399,7 +399,7 @@ DEPENDENCIES
   omnibus!
   omnibus-software!
   pedump
-  test-kitchen (>= 1.23)
+  test-kitchen (>= 2)
   winrm-fs (~> 1.0)
 
 BUNDLED WITH
