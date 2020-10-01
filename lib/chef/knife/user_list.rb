@@ -35,8 +35,13 @@ class Chef
         description: "List all global users."
 
       def run
-        results = config[:global] ? root_rest.get("users") : rest.get("users")
-        output(format_list_for_display(results))
+        if !config[:global].nil? && config[:global]
+          results = format_list_for_display(root_rest.get("users"))
+        else
+          user_arr = rest.get("users")
+          results = user_arr.map { |user| user["user"]["username"] }
+        end
+        output(results)
       end
     end
   end
