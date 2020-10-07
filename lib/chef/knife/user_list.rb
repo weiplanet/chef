@@ -22,6 +22,10 @@ class Chef
   class Knife
     class UserList < Knife
 
+      deps do
+        require_relative "../user_v1"
+      end
+
       banner "knife user list (options)"
 
       option :with_uri,
@@ -35,13 +39,8 @@ class Chef
         description: "List all global users."
 
       def run
-        if !config[:global].nil? && config[:global]
-          results = format_list_for_display(root_rest.get("users"))
-        else
-          user_arr = rest.get("users")
-          results = user_arr.map { |user| user["user"]["username"] }
-        end
-        output(results)
+        results = !config[:global].nil? && config[:global] ? root_rest.get("users") : Chef::UserV1.list
+        output(format_list_for_display(results))
       end
     end
   end
