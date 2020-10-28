@@ -173,6 +173,7 @@ namespace :docs_site do
 
       # these package properties support passing arrays for the package name
       properties["common_resource_functionality_multiple_packages"] = true if %w{yum_package apt_package zypper_package homebrew_package dnf_package pacman_package homebrew_package}.include?(name)
+      properties["properties_multiple_packages"] = true if %w{yum_package apt_package zypper_package homebrew_package dnf_package pacman_package homebrew_package}.include?(name)
 
       properties["common_resource_functionality_resources_common_windows_security"] = true if name == "remote_directory"
 
@@ -187,8 +188,6 @@ namespace :docs_site do
       properties["nameless_apt_update"] = true if name == "apt_update"
 
       properties["nameless_build_essential"] = true if name == "build_essential"
-
-      properties["properties_multiple_packages"] = true if %w{dnf_package package zypper_package}.include?(name)
 
       properties["properties_resources_common_windows_security"] = true if %w{cookbook_file file template remote_file directory}.include?(name)
 
