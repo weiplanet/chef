@@ -418,9 +418,9 @@ class Chef
                   # this is an odd use case
                   logger.trace("#{new_resource} #{package_name} #{new_version} is already installed -- you are equality pinning with an :upgrade action, this may be deprecated in the future")
                   target_version_array.push(nil)
-                elsif version_equals?(current_version, candidate_version)
-                  logger.trace("#{new_resource} #{package_name} #{candidate_version} is already installed")
-                  target_version_array.push(nil)
+#                elsif version_equals?(current_version, candidate_version)
+#                  logger.trace("#{new_resource} #{package_name} #{candidate_version} is already installed")
+#                  target_version_array.push(nil)
                 elsif candidate_version.nil?
                   logger.trace("#{new_resource} #{package_name} has no candidate_version to upgrade to")
                   target_version_array.push(nil)
