@@ -49,6 +49,7 @@ class Chef
             end
           end
           current_version ||= candidate_version if is_installed
+          puts "CANDIDATE: #{candidate_version} CURRENT: #{current_version}"
           { current_version: current_version, candidate_version: candidate_version }
         end
 
