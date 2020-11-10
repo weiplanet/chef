@@ -73,16 +73,7 @@ launchd "io.chef.testing.fake" do
   action "enable"
 end
 
-homebrew_update "update" do
-  action :update
-end
-
-homebrew_package "vim"
-
-homebrew_package "vim" do
-  action :purge
-end
-
+include_recipe "::_homebrew"
 include_recipe "::_dmg_package"
 include_recipe "::_macos_userdefaults"
 include_recipe "::_ohai_hint"
