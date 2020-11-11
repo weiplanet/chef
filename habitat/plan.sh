@@ -12,6 +12,7 @@ pkg_build_deps=(
   core/make
   core/gcc
   core/git
+  core/bundler/1.17.3
 )
 pkg_deps=(
   core/glibc
